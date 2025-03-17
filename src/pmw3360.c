@@ -630,8 +630,8 @@ static int pmw3360_report_data(const struct device *dev) {
 //    int16_t raw_y =
 //        TOINT16((buf[PMW3610_Y_L_POS] + ((buf[PMW3610_XY_H_POS] & 0x0F) << 8)), 12) / dividor;
 
-    int16_t raw_x = ((int16_t)sys_get_le16(buf[PMW3360_DX_POS])) / CONFIG_PMW3360_CPI_DIVIDOR;
-    int16_t raw_y = ((int16_t)sys_get_le16(buf[PMW3360_DY_POS])) / CONFIG_PMW3360_CPI_DIVIDOR;
+    int16_t raw_x = ((int16_t)sys_get_le16(&buf[PMW3360_DX_POS])) / CONFIG_PMW3360_CPI_DIVIDOR;
+    int16_t raw_y = ((int16_t)sys_get_le16(&buf[PMW3360_DY_POS])) / CONFIG_PMW3360_CPI_DIVIDOR;
     int16_t x;
     int16_t y;
 
