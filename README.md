@@ -2,7 +2,8 @@ PMW3360 driver implementation for ZMK with at least Zephyr 3.5
 
 THIS driver is ganked from [inorichi's PMW3610 driver](https://github.com/inorichi/zmk-pmw3610-driver) which is based off of [ufan's implementation](https://github.com/inorichi/zmk/tree/support-trackpad) of the driver.
 
-### Important to note that the PMW3360 is very power hungry compared to the PMW3610.  If going fully wireless, you'll need big batteries and, even then, your battery life won't be great.
+### Important to note that the PMW3360 is very power hungry compared to the PMW3610. If going fully wireless, you'll need big batteries and, even then, your battery life won't be great.
+
 ## Installation
 
 Only GitHub actions builds are covered here. Local builds are different for each user, therefore it's not possible to cover all cases.
@@ -13,17 +14,17 @@ Include this project on your ZMK's west manifest in `config/west.yml`:
 manifest:
   remotes:
     - name: zmkfirmware
-      url-base: https://github.com/petejohanson
-    - name: bullwinkle3000
-      url-base: https://github.com/bullwinkle3000
+      url-base: https://github.com/zmkfirmware
+    - name: KOHSUK
+      url-base: https://github.com/KOHSUK
   projects:
     - name: zmk
       remote: zmkfirmware
-      revision: feat/pointers-move-scroll
+      revision: main
       import: app/west.yml
     - name: zmk-pmw3360-driver
-      remote: bullwinkle3000
-      revision: main
+      remote: KOHSUK
+      revision: pmw3360
   self:
     path: config
 ```
@@ -70,7 +71,7 @@ Now, update your `board.overlay` adding the necessary bits (update the pins for 
 
     trackball: trackball@0 {
         status = "okay";
-        compatible = "src,pmw3360";
+        compatible = "pixart,pmw3360";
         reg = <0>;
         spi-max-frequency = <2000000>;
         irq-gpios = <&gpio0 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
