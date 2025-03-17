@@ -84,6 +84,12 @@ config PMW3360_ORIENTATION_270
 
 endchoice
 
+config CONFIG_PMW3360_INVERT_X
+    bool "Invert X axis"
+
+config CONFIG_PMW3360_INVERT_Y
+	bool "Invert Y axis"
+
 module = PMW3360
 module-str = PMW3360
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
