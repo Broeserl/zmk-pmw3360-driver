@@ -84,10 +84,10 @@ config PMW3360_ORIENTATION_270
 
 endchoice
 
-config CONFIG_PMW3360_INVERT_X
+config PMW3360_INVERT_X
     bool "Invert X axis"
 
-config CONFIG_PMW3360_INVERT_Y
+config PMW3360_INVERT_Y
 	bool "Invert Y axis"
 
 module = PMW3360
