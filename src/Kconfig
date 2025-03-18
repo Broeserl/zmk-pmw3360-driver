@@ -84,11 +84,11 @@ config PMW3360_ORIENTATION_270
 
 endchoice
 
-# config PMW3360_INVERT_X
-#     bool "Invert the X axis of PMW3360 sensor"
+config PMW3360_INVERT_X
+    bool "Invert the X axis of PMW3360 sensor"
 
-# config PMW3360_INVERT_Y
-#     bool "Invert the Y axis of PMW3360 sensor"
+config PMW3360_INVERT_Y
+    bool "Invert the Y axis of PMW3360 sensor"
 
 module = PMW3360
 module-str = PMW3360
