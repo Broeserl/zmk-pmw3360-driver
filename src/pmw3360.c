@@ -15,6 +15,7 @@
 #include <zephyr/input/input.h>
 //#include <zephyr/keymap.h>
 #include "pmw3360.h"
+#include <stdint.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
@@ -23,6 +24,32 @@ LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 /* SROM firmware meta-data, defined in pmw3360_piv.c */
 extern const size_t pmw3360_firmware_length;
 extern const uint8_t pmw3360_firmware_data[];
+
+#define TABLE_SIZE 72
+ 
+ // Lookup table for sine values (5-degree steps)
+ const float sin_table[TABLE_SIZE] = {
+      0.0,       0.0872,   0.1736,   0.2588,   0.3420,   0.4226,   0.5000,   0.5736,   0.6428,   0.7071,
+      0.7660,    0.8192,   0.8660,   0.9063,   0.9397,   0.9659,   0.9848,   0.9962,   1.0000,   0.9962,
+      0.9848,    0.9659,   0.9397,   0.9063,   0.8660,   0.8192,   0.7660,   0.7071,   0.6428,   0.5736,
+      0.5000,    0.4226,   0.3420,   0.2588,   0.1736,   0.0872,   0.0,     -0.0872,  -0.1736,  -0.2588,
+     -0.3420,   -0.4226,  -0.5000,  -0.5736,  -0.6428,  -0.7071,  -0.7660,  -0.8192,  -0.8660,  -0.9063,
+     -0.9397,   -0.9659,  -0.9848,  -0.9962,  -1.0000,  -0.9962,  -0.9848,  -0.9659,  -0.9397,  -0.9063,
+     -0.8660,   -0.8192,  -0.7660,  -0.7071,  -0.6428,  -0.5736,  -0.5000,  -0.4226,  -0.3420,  -0.2588,
+     -0.1736,   -0.0872
+ };
+ 
+ // Lookup table for cosine values (5-degree steps)
+ const float cos_table[TABLE_SIZE] = {
+     1.0,       0.9962,   0.9848,   0.9659,   0.9397,   0.9063,   0.8660,   0.8192,   0.7660,   0.7071,
+     0.6428,    0.5736,   0.5000,   0.4226,   0.3420,   0.2588,   0.1736,   0.0872,   0.0,     -0.0872,
+    -0.1736,   -0.2588,  -0.3420,  -0.4226,  -0.5000,  -0.5736,  -0.6428,  -0.7071,  -0.7660,  -0.8192,
+    -0.8660,   -0.9063,  -0.9397,  -0.9659,  -0.9848,  -0.9962,  -1.0,     -0.9962,  -0.9848,  -0.9659,
+    -0.9397,   -0.9063,  -0.8660,  -0.8192,  -0.7660,  -0.7071,  -0.6428,  -0.5736,  -0.5000,  -0.4226,
+    -0.3420,   -0.2588,  -0.1736,  -0.0872,   0.0,      0.0872,   0.1736,   0.2588,   0.3420,   0.4226,
+     0.5000,    0.5736,   0.6428,   0.7071,   0.7660,   0.8192,   0.8660,   0.9063,   0.9397,   0.9659,
+     0.9848,    0.9962
+ };
 
 /* sensor initialization steps definition */
 // init is done in non-bpmw3360_async_initlocking manner (i.e., async), a delayable work is defined for this job
@@ -79,7 +106,7 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
         k_busy_wait(T_NCS_SCLK);
     }
 
-//    LOG_INF("finished spi_cs_ctrl");
+    LOG_INF("finished spi_cs_ctrl");
     return err;
 }
 
@@ -173,7 +200,7 @@ static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
 
 static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burst_size) {
 
-//    LOG_INF("In burst read");
+    LOG_INF("In burst read");
     int err;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
@@ -234,7 +261,7 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
 }
 
 static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf, size_t size) {
-//    LOG_INF("In burst write");
+    LOG_INF("In burst write");
     int err;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
@@ -529,7 +556,7 @@ static void irq_handler(const struct device *gpiob, struct gpio_callback *cb, ui
     const struct device *dev = data->dev;
     const struct pixart_config *config = dev->config;
 
-//    LOG_INF("In irq handler");
+    LOG_INF("In irq handler");
     // disable the interrupt line first
     err = gpio_pin_interrupt_configure_dt(&config->irq_gpio, GPIO_INT_DISABLE);
     if (unlikely(err)) {
@@ -542,7 +569,7 @@ static void irq_handler(const struct device *gpiob, struct gpio_callback *cb, ui
 }
 
 static void set_interrupt(const struct device *dev, const bool en) {
-//    LOG_INF("In pwm3360_set_interrupt");
+    LOG_INF("In pwm3360_set_interrupt");
     const struct pixart_config *config = dev->config;
     int ret = gpio_pin_interrupt_configure_dt(&config->irq_gpio,
                                               en ? GPIO_INT_LEVEL_ACTIVE : GPIO_INT_DISABLE);
@@ -568,7 +595,7 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
 }
 
 static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
-//    LOG_INF("In pwm3360_set_cpi_if_needed");
+    LOG_INF("In pwm3360_set_cpi_if_needed");
     struct pixart_data *data = dev->data;
     if (cpi != data->curr_cpi) {
         return set_cpi(dev, cpi);
@@ -576,8 +603,26 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
     return 0;
 }
 
+// Function to rotate coordinates by a specified angle
+ static void rotate_coordinates(int16_t x, int16_t y, float angle_degrees, int16_t *x_out, int16_t *y_out) {
+     // Ensure the angle is within 0-360 degrees
+     //angle_degrees %= 360;
+     if (angle_degrees < 0) angle_degrees += 360;
+
+     // Determine the index in the lookup table
+     int index = angle_degrees / 5;
+
+     // Get sine and cosine values from the lookup table
+     float cos_angle = cos_table[index];
+     float sin_angle = sin_table[index];
+
+     // Apply the rotation matrix
+     *x_out = (int16_t)(x * cos_angle - y * sin_angle);
+     *y_out = (int16_t)(x * sin_angle + y * cos_angle);
+}
+
 static int pmw3360_report_data(const struct device *dev) {
-//    LOG_INF("In pwm3360_report_data");
+    LOG_INF("In pwm3360_report_data");
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3360_BURST_SIZE];
 
@@ -635,19 +680,12 @@ static int pmw3360_report_data(const struct device *dev) {
     int16_t x;
     int16_t y;
 
-    if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_0)) {
-        x = -raw_x;
-        y = raw_y;
-    } else if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_90)) {
-        x = raw_y;
-        y = -raw_x;
-    } else if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_180)) {
-        x = raw_x;
-        y = -raw_y;
-    } else if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_270)) {
-        x = -raw_y;
-        y = raw_x;
-    }
+    float angle = CONFIG_PMW3360_ROTATION_ANGLE_DEG;
+    // Rotate the coordinates
+    int16_t x_rotated, y_rotated;
+    rotate_coordinates(raw_x, raw_y, angle, &x_rotated, &y_rotated);
+    x = x_rotated;
+    y = y_rotated;
 
     if (IS_ENABLED(CONFIG_PMW3360_INVERT_X)) {
         x = -x;
@@ -718,7 +756,7 @@ static int pmw3360_report_data(const struct device *dev) {
 
 static void pmw3360_gpio_callback(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
-//    LOG_INF("In pwm3360_gpio_callback");
+    LOG_INF("In pwm3360_gpio_callback");
     struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
     const struct device *dev = data->dev;
 
@@ -729,7 +767,7 @@ static void pmw3360_gpio_callback(const struct device *gpiob, struct gpio_callba
 }
 
 static void pmw3360_work_callback(struct k_work *work) {
-//    LOG_INF("In pwm3360_work_callback");
+    LOG_INF("In pwm3360_work_callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
     const struct device *dev = data->dev;
 
@@ -872,12 +910,6 @@ static int pmw3360_init(const struct device *dev) {
 
     // init trigger handler work
     k_work_init(&data->trigger_work, pmw3360_work_callback);
-
-    // check readiness of spi bus
-//    if (!device_is_ready(&config->cs_gpio.port)) {
-//        LOG_ERR("SPI CS device not ready");
-//        return -ENODEV;
-//    }
 
     // check readiness of cs gpio pin and init it to inactive
     if (!device_is_ready(config->cs_gpio.port)) {

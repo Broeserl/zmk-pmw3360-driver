@@ -66,29 +66,20 @@ config PMW3360_REST2_DOWNSHIFT_TIME_MS
 	  Default REST2 mode downshift down time in milliseconds.
 	  Time after which sensor goes from REST2 to REST3 mode.
 
-choice
-	prompt "Select PMW3360 sensor orientation"
-	default PMW3360_ORIENTATION_0
-
-config PMW3360_ORIENTATION_0
-	bool "PMW3360 not rotated"
-
-config PMW3360_ORIENTATION_90
-	bool "PMW3360 rotated 90 deg clockwise"
-
-config PMW3360_ORIENTATION_180
-	bool "PMW3360 rotated 180 deg clockwise"
-
-config PMW3360_ORIENTATION_270
-	bool "PMW3360 rotated 270 deg clockwise"
-
-endchoice
 
 config PMW3360_INVERT_X
     bool "Invert the X axis of PMW3360 sensor"
 
 config PMW3360_INVERT_Y
     bool "Invert the Y axis of PMW3360 sensor"
+
+config PMW3360_ROTATION_ANGLE_DEG
+  int "PMW3360's default rotation angle in degree"
+  default 0
+  range 0 355
+  help
+    Default rotation angle of the sensor input in degree.
+
 
 module = PMW3360
 module-str = PMW3360
