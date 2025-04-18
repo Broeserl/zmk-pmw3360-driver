@@ -398,60 +398,6 @@ static int set_downshift_time(const struct device *dev, uint8_t reg_addr, uint32
     return err;
 }
 
-/* set sampling rate in each mode (in ms) */
-static int set_sample_time(const struct device *dev, uint8_t reg_addr_lower, uint8_t reg_addr_upper,
-                           uint32_t sample_time) {
-    /* Set sample time for the Rest1-Rest3 modes.
-     * Values above 0x09B0 will trigger internal watchdog reset.
-     */
-    uint32_t maxtime = 0x9B0;
-    uint32_t mintime = 1;
-
-    if ((sample_time > maxtime) || (sample_time < mintime)) {
-        LOG_WRN("Sample time %u out of range", sample_time);
-        return -EINVAL;
-    }
-
-    LOG_INF("Set sample time to %u ms", sample_time);
-
-    /* The sample time is (reg_value + 1) ms. */
-    sample_time--;
-    uint8_t buf[2];
-
-    sys_put_le16((uint16_t)sample_time, buf);
-
-    int err = reg_write(dev, reg_addr_lower, buf[0]);
-
-    if (!err) {
-        err = reg_write(dev, reg_addr_upper, buf[1]);
-    } else {
-        LOG_ERR("Failed to change sample time");
-    }
-
-    return err;
-}
-
-static int set_rest_modes(const struct device *dev, uint8_t reg_addr, bool enable) {
-    uint8_t value;
-    int err = reg_read(dev, reg_addr, &value);
-
-    if (err) {
-        LOG_ERR("Failed to read Config2 register");
-        return err;
-    }
-
-    WRITE_BIT(value, PMW3360_REST_EN_POS, enable);
-
-    LOG_INF("%sable rest modes", (enable) ? ("En") : ("Dis"));
-    err = reg_write(dev, reg_addr, value);
-
-    if (err) {
-        LOG_ERR("Failed to set rest mode");
-    }
-
-    return err;
-}
-
 static int pmw3360_async_init_fw_load_start(const struct device *dev) {
     int err = 0;
 
@@ -548,24 +494,6 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     }
     LOG_INF("Finished firmware load verify");
     return err;
-}
-
-static void irq_handler(const struct device *gpiob, struct gpio_callback *cb, uint32_t pins) {
-    int err;
-    struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
-    const struct device *dev = data->dev;
-    const struct pixart_config *config = dev->config;
-
-    LOG_INF("In irq handler");
-    // disable the interrupt line first
-    err = gpio_pin_interrupt_configure_dt(&config->irq_gpio, GPIO_INT_DISABLE);
-    if (unlikely(err)) {
-        LOG_ERR("Cannot disable IRQ");
-        k_panic();
-    }
-
-    // submit the real handler work
-    k_work_submit(&data->trigger_work);
 }
 
 static void set_interrupt(const struct device *dev, const bool en) {
@@ -670,22 +598,13 @@ static int pmw3360_report_data(const struct device *dev) {
         return err;
     }
 
-//    int16_t raw_x =
-//        TOINT16((buf[PMW3610_X_L_POS] + ((buf[PMW3610_XY_H_POS] & 0xF0) << 4)), 12) / dividor;
-//    int16_t raw_y =
-//        TOINT16((buf[PMW3610_Y_L_POS] + ((buf[PMW3610_XY_H_POS] & 0x0F) << 8)), 12) / dividor;
-
     int16_t raw_x = ((int16_t)sys_get_le16(&buf[PMW3360_DX_POS])) / dividor;
     int16_t raw_y = ((int16_t)sys_get_le16(&buf[PMW3360_DY_POS])) / dividor;
-    int16_t x;
-    int16_t y;
+    int16_t x, y;
 
-    float angle = CONFIG_PMW3360_ROTATION_ANGLE_DEG;
     // Rotate the coordinates
-    int16_t x_rotated, y_rotated;
-    rotate_coordinates(raw_x, raw_y, angle, &x_rotated, &y_rotated);
-    x = x_rotated;
-    y = y_rotated;
+    float angle = CONFIG_PMW3360_ROTATION_ANGLE_DEG;
+    rotate_coordinates(raw_x, raw_y, angle, &x, &y);
 
     if (IS_ENABLED(CONFIG_PMW3360_INVERT_X)) {
         x = -x;
@@ -695,60 +614,11 @@ static int pmw3360_report_data(const struct device *dev) {
         y = -y;
     }
 
-//#ifdef CONFIG_PMW3610_SMART_ALGORITHM
-//    int16_t shutter =
-//        ((int16_t)(buf[PMW3610_SHUTTER_H_POS] & 0x01) << 8) + buf[PMW3610_SHUTTER_L_POS];
-//    if (data->sw_smart_flag && shutter < 45) {
-//        reg_write(dev, 0x32, 0x00);
-//
-//        data->sw_smart_flag = false;
-//    }
-//
-//    if (!data->sw_smart_flag && shutter > 45) {
-//        reg_write(dev, 0x32, 0x80);
-//
-//        data->sw_smart_flag = true;
-//    }
-//#endif
-
-//#ifdef CONFIG_PMW3610_POLLING_RATE_125_SW
-//    int64_t curr_time = k_uptime_get();
-//    if (data->last_poll_time == 0 || curr_time - data->last_poll_time > 128) {
-//        data->last_poll_time = curr_time;
-//        data->last_x = x;
-//        data->last_y = y;
-//        return 0;
-//    } else {
-//        x += data->last_x;
-//        y += data->last_y;
-//        data->last_poll_time = 0;
-//        data->last_x = 0;
-//        data->last_y = 0;
-//    }
-//#endif
-
     if (x != 0 || y != 0) {
         if (input_mode != SCROLL) {
             input_report_rel(dev, INPUT_REL_X, x, false, K_FOREVER);
             input_report_rel(dev, INPUT_REL_Y, y, true, K_FOREVER);
         }
-//        } else {
-//            data->scroll_delta_x += x;
-//            data->scroll_delta_y += y;
-//            if (abs(data->scroll_delta_y) > CONFIG_PMW3610_SCROLL_TICK) {
-//                input_report_rel(dev, INPUT_REL_WHEEL,
-//                                 data->scroll_delta_y > 0 ? PMW3610_SCROLL_Y_NEGATIVE : PMW3610_SCROLL_Y_POSITIVE,
-//                                 true, K_FOREVER);
-//                data->scroll_delta_x = 0;
-//                data->scroll_delta_y = 0;
-//            } else if (abs(data->scroll_delta_x) > CONFIG_PMW3610_SCROLL_TICK) {
-//                input_report_rel(dev, INPUT_REL_HWHEEL,
-//                                 data->scroll_delta_x > 0 ? PMW3610_SCROLL_X_NEGATIVE : PMW3610_SCROLL_X_POSITIVE,
-//                                 true, K_FOREVER);
-//                data->scroll_delta_x = 0;
-//                data->scroll_delta_y = 0;
-//            }
-//        }
     }
 
     return err;
@@ -774,42 +644,6 @@ static void pmw3360_work_callback(struct k_work *work) {
     pmw3360_report_data(dev);
     set_interrupt(dev, true);
 }
-
-//static void trigger_handler(struct k_work *work) {
-//    sensor_trigger_handler_t handler;
-//    int err = 0;
-//    struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
-//    const struct device *dev = data->dev;
-//    const struct pixart_config *config = dev->config;
-//
-//    LOG_INF("In trigger handler");
-//
-//    // 1. the first lock period is used to procoss the trigger
-//    // if data_ready_handler is non-NULL, otherwise do nothing
-//    k_spinlock_key_t key = k_spin_lock(&data->lock);
-//
-//    handler = data->data_ready_handler;
-//    k_spin_unlock(&data->lock, key);
-//
-//    if (!handler) {
-//        return;
-//    }
-//
-//    handler(dev, data->trigger);
-//
-//    // 2. the second lock period is used to resume the interrupt line
-//    // if data_ready_handler is non-NULL, otherwise keep it inactive
-//    key = k_spin_lock(&data->lock);
-//    if (data->data_ready_handler) {
-//        err = gpio_pin_interrupt_configure_dt(&config->irq_gpio, GPIO_INT_LEVEL_ACTIVE);
-//    }
-//    k_spin_unlock(&data->lock, key);
-//
-//    if (unlikely(err)) {
-//        LOG_ERR("Cannot re-enable IRQ");
-//        k_panic();
-//    }
-//}
 
 static int pmw3360_async_init_power_up(const struct device *dev) {
     /* Reset sensor */
@@ -942,181 +776,6 @@ static int pmw3360_init(const struct device *dev) {
 
     return err;
 }
-
-//static int pmw3360_sample_fetch(const struct device *dev, enum sensor_channel chan) {
-//    LOG_INF("In sample fetch");
-//    struct pixart_data *data = dev->data;
-//    uint8_t buf[PMW3360_BURST_SIZE];
-//
-//    if (unlikely(chan != SENSOR_CHAN_ALL)) {
-//        return -ENOTSUP;
-//    }
-//
-//    if (unlikely(!data->ready)) {
-//        LOG_DBG("Device is not initialized yet");
-//        return -EBUSY;
-//    }
-//
-//    int err = motion_burst_read(dev, buf, sizeof(buf));
-//
-//    if (!err) {
-//        int16_t x = ((int16_t)sys_get_le16(&buf[PMW3360_DX_POS])) / CONFIG_PMW3360_CPI_DIVIDOR;
-//        int16_t y = ((int16_t)sys_get_le16(&buf[PMW3360_DY_POS])) / CONFIG_PMW3360_CPI_DIVIDOR;
-//        /* int16_t x = sys_get_le16(&buf[PMW3360_DX_POS]); */
-//        /* int16_t y = sys_get_le16(&buf[PMW3360_DY_POS]); */
-//
-//        if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_0)) {
-//            data->x = -x;
-//            data->y = y;
-//        } else if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_90)) {
-//            data->x = y;
-//            data->y = -x;
-//        } else if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_180)) {
-//            data->x = x;
-//            data->y = -y;
-//        } else if (IS_ENABLED(CONFIG_PMW3360_ORIENTATION_270)) {
-//            data->x = -y;
-//            data->y = x;
-//        }
-//    }
-//
-//    return err;
-//}
-
-//static int pmw3360_channel_get(const struct device *dev, enum sensor_channel chan,
-//                               struct sensor_value *val) {
-//    LOG_INF("In channel get");
-//    struct pixart_data *data = dev->data;
-//
-//    if (unlikely(!data->ready)) {
-//        LOG_DBG("Device is not initialized yet");
-//        return -EBUSY;
-//    }
-//
-//    switch (chan) {
-//    case SENSOR_CHAN_POS_DX:
-//        val->val1 = data->x;
-//        val->val2 = 0;
-//        break;
-//
-//    case SENSOR_CHAN_POS_DY:
-//        val->val1 = data->y;
-//        val->val2 = 0;
-//        break;
-//
-//    default:
-//        return -ENOTSUP;
-//    }
-//
-//    return 0;
-//}
-
-/* Setup the callback for actual trigger handling */
-// handler could be NULL, in which case the effect is disabling the interrupt line
-// Thus it has dual function:
-// 1. set up a handler callback
-// 2. set up a flag (i.e., data_ready_handler) to indicate resuming the interrput line or not
-//    This feature is useful to pass the resuming of the interrupt to application
-//static int pmw3360_trigger_set(const struct device *dev, const struct sensor_trigger *trig,
-//                               sensor_trigger_handler_t handler) {
-//    LOG_INF("In trigger set");
-//    struct pixart_data *data = dev->data;
-//    const struct pixart_config *config = dev->config;
-//    int err;
-//
-//    if (unlikely(trig->type != SENSOR_TRIG_DATA_READY)) {
-//        return -ENOTSUP;
-//    }
-//
-//    if (unlikely(trig->chan != SENSOR_CHAN_ALL)) {
-//        return -ENOTSUP;
-//    }
-//
-//    if (unlikely(!data->ready)) {
-//        LOG_DBG("Device is not initialized yet");
-//        return -EBUSY;
-//    }
-//
-//    // spin lock is needed, so that the handler is not invoked before its pointer is assigned
-//    // a valid value
-//    k_spinlock_key_t key = k_spin_lock(&data->lock);
-//
-//    // if non-NULL (a real handler defined), eanble the interrupt line
-//    // otherwise, disable the interrupt line
-//    if (handler) {
-//        err = gpio_pin_interrupt_configure_dt(&config->irq_gpio, GPIO_INT_LEVEL_ACTIVE);
-//    } else {
-//        err = gpio_pin_interrupt_configure_dt(&config->irq_gpio, GPIO_INT_DISABLE);
-//    }
-//
-//    if (!err) {
-//        data->data_ready_handler = handler;
-//    }
-//
-//    data->trigger = trig;
-//
-//    k_spin_unlock(&data->lock, key);
-//
-//    return err;
-//}
-
-//static int pmw3360_attr_set(const struct device *dev, enum sensor_channel chan,
-//                            enum sensor_attribute attr, const struct sensor_value *val) {
-//    struct pixart_data *data = dev->data;
-//    int err;
-//
-//    if (unlikely(chan != SENSOR_CHAN_ALL)) {
-//        return -ENOTSUP;
-//    }
-//
-//    if (unlikely(!data->ready)) {
-//        LOG_DBG("Device is not initialized yet");
-//        return -EBUSY;
-//    }
-//
-//    switch ((uint32_t)attr) {
-//    case PMW3360_ATTR_CPI:
-//        err = set_cpi(dev, PMW3360_SVALUE_TO_CPI(*val));
-//        break;
-//
-//    case PMW3360_ATTR_REST_ENABLE:
-//        err = set_rest_modes(dev, PMW3360_REG_CONFIG2, PMW3360_SVALUE_TO_BOOL(*val));
-//        break;
-//
-//    case PMW3360_ATTR_RUN_DOWNSHIFT_TIME:
-//        err = set_downshift_time(dev, PMW3360_REG_RUN_DOWNSHIFT, PMW3360_SVALUE_TO_TIME(*val));
-//        break;
-//
-//    case PMW3360_ATTR_REST1_DOWNSHIFT_TIME:
-//        err = set_downshift_time(dev, PMW3360_REG_REST1_DOWNSHIFT, PMW3360_SVALUE_TO_TIME(*val));
-//        break;
-//
-//    case PMW3360_ATTR_REST2_DOWNSHIFT_TIME:
-//        err = set_downshift_time(dev, PMW3360_REG_REST2_DOWNSHIFT, PMW3360_SVALUE_TO_TIME(*val));
-//        break;
-//
-//    case PMW3360_ATTR_REST1_SAMPLE_TIME:
-//        err = set_sample_time(dev, PMW3360_REG_REST1_RATE_LOWER, PMW3360_REG_REST1_RATE_UPPER,
-//                              PMW3360_SVALUE_TO_TIME(*val));
-//        break;
-//
-//    case PMW3360_ATTR_REST2_SAMPLE_TIME:
-//        err = set_sample_time(dev, PMW3360_REG_REST2_RATE_LOWER, PMW3360_REG_REST2_RATE_UPPER,
-//                              PMW3360_SVALUE_TO_TIME(*val));
-//        break;
-//
-//    case PMW3360_ATTR_REST3_SAMPLE_TIME:
-//        err = set_sample_time(dev, PMW3360_REG_REST3_RATE_LOWER, PMW3360_REG_REST3_RATE_UPPER,
-//                              PMW3360_SVALUE_TO_TIME(*val));
-//        break;
-//
-//    default:
-//        LOG_ERR("Unknown attribute");
-//        return -ENOTSUP;
-//    }
-//
-//    return err;
-//}
 
 #define PMW3360_DEFINE(n)                                                                          \
     static struct pixart_data data##n;                                                             \
