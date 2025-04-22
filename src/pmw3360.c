@@ -13,6 +13,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/input/input.h>
+#include <zmk/keymap.h>
 #include "pmw3360.h"
 #include <stdint.h>
 
@@ -566,7 +567,6 @@ static int pmw3360_report_data(const struct device *dev) {
 
     int32_t dividor;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
-    bool input_mode_changed = data->curr_mode != input_mode;
     switch (input_mode) {
     case MOVE:
         LOG_INF("MOVE mode");
