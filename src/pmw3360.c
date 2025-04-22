@@ -589,14 +589,6 @@ static int pmw3360_report_data(const struct device *dev) {
 
     data->curr_mode = input_mode;
 
-//#if AUTOMOUSE_LAYER > 0
-//    if (input_mode == MOVE &&
-//            (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER)
-//    ) {
-//        activate_automouse_layer();
-//    }
-//#endif
-
     int err = motion_burst_read(dev, buf, sizeof(buf));
     if (err) {
         return err;
@@ -640,9 +632,6 @@ static void pmw3360_gpio_callback(const struct device *gpiob, struct gpio_callba
     k_busy_wait(15000);
     // submit the real handler work
     k_work_submit(&data->trigger_work);
-    
-    //LOG_ERR("I was here and did start the timer");
-    //k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(polling_interval));
 }
 
 static void pmw3360_gpio_callback_alternative(const struct device *gpiob, struct gpio_callback *cb,
@@ -671,7 +660,6 @@ static void pmw3360_work_callback_alternative(struct k_work *work) {
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
     const struct device *dev = data->dev;
 
-    LOG_ERR("I was here and did start the timer");
     k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(polling_interval));
 }
 
@@ -804,7 +792,7 @@ static void trackball_poll_handler(struct k_work *work) {
 }
 
 // timer expiry function
-void trackball_timer_expiry(struct k_timer *timer) {
+void polling_timer_expiry(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
 
     // check whether reaching the polling count limit
@@ -821,17 +809,12 @@ void trackball_timer_expiry(struct k_timer *timer) {
 }
 
 // timer stop function
-void trackball_timer_stop(struct k_timer *timer) {
+void polling_timer_stop(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
     const struct device *dev = data->dev;
 
     // reset polling count
     polling_count = 0;
-
-//    // Clear the interrupt condition by reading motion register
-//    uint8_t motion_reg;
-//    reg_read(dev, PMW3360_REG_MOTION, &motion_reg);
-//    LOG_INF("Cleared interrupt, motion reg: 0x%02x", motion_reg);
 
     // resume motion interrupt line
     set_interrupt(dev, true);
@@ -848,7 +831,7 @@ static int pmw3360_init_alternative_mode(const struct device *dev) {
     data->dev = dev;
 
     // setup the timer and handler function of the polling work
-    k_timer_init(&data->poll_timer, trackball_timer_expiry, trackball_timer_stop);
+    k_timer_init(&data->poll_timer, polling_timer_expiry, polling_timer_stop);
     k_work_init(&data->trigger_work, pmw3360_work_callback_alternative);
     k_work_init(&data->poll_work, trackball_poll_handler);
 
