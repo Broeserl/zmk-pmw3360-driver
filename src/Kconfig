@@ -13,6 +13,43 @@ menuconfig PMW3360
 
 if PMW3360
 
+choice PMW3360_OPERATING_MODE
+    prompt "PMW3360 operating mode"
+    default PMW3360_INTERRUPT_DIRECT
+    help
+      Select the operating mode for the PMW3360 driver.
+
+config PMW3360_INTERRUPT_DIRECT
+    bool "Direct interrupt handling mode"
+    help
+      In this mode, the sensor interrupt directly triggers data reporting.
+      This is the basic implementation with immediate response.
+
+config PMW3360_INTERRUPT_POLLING
+    bool "Timer-based polling mode"
+    help
+      In this mode, sensor interrupts trigger a timer that polls the sensor
+      multiple times. This can improve tracking reliability with multiple
+      samples after motion is detected.
+
+endchoice
+
+config PMW3360_POLLING_INTERVAL_MS
+    int "Polling interval in milliseconds"
+    default 15
+    range 1 100
+    depends on PMW3360_INTERRUPT_POLLING
+    help
+      Interval between polling events in milliseconds when using timer-based polling mode.
+
+config PMW3360_MAX_POLL_COUNT
+    int "Maximum number of polling events"
+    default 20
+    range 1 100
+    depends on PMW3360_INTERRUPT_POLLING
+    help
+      Maximum number of polling events triggered by a single motion interrupt.
+
 config PMW3360_CPI
 	int "PMW3360's default CPI"
 	default 1600
