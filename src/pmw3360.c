@@ -645,6 +645,18 @@ static void pmw3360_gpio_callback(const struct device *gpiob, struct gpio_callba
     //k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(polling_interval));
 }
 
+static void pmw3360_gpio_callback_alternative(const struct device *gpiob, struct gpio_callback *cb,
+                                  uint32_t pins) {
+    LOG_INF("In pwm3360_gpio_callback");
+    struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
+    const struct device *dev = data->dev;
+
+    set_interrupt(dev, false);
+
+    // submit the real handler work
+    k_work_submit(&data->trigger_work);
+}
+
 static void pmw3360_work_callback(struct k_work *work) {
     LOG_INF("In pwm3360_work_callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
@@ -652,6 +664,15 @@ static void pmw3360_work_callback(struct k_work *work) {
 
     pmw3360_report_data(dev);
     set_interrupt(dev, true);
+}
+
+static void pmw3360_work_callback_alternative(struct k_work *work) {
+    LOG_INF("In pwm3360_work_callback");
+    struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
+    const struct device *dev = data->dev;
+
+    LOG_ERR("I was here and did start the timer");
+    k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(polling_interval));
 }
 
 static int pmw3360_async_init_power_up(const struct device *dev) {
@@ -741,10 +762,42 @@ static int pmw3360_init_irq(const struct device *dev) {
     return err;
 }
 
+static int pmw3360_init_irq_alternative(const struct device *dev) {
+     LOG_INF("Configure irq...");
+
+    int err;
+    struct pixart_data *data = dev->data;
+    const struct pixart_config *config = dev->config;
+
+    // check readiness of irq gpio pin
+    if (!device_is_ready(config->irq_gpio.port)) {
+        LOG_ERR("IRQ GPIO device not ready");
+        return -ENODEV;
+    }
+
+    // init the irq pin
+    err = gpio_pin_configure_dt(&config->irq_gpio, GPIO_INPUT);
+    if (err) {
+        LOG_ERR("Cannot configure IRQ GPIO");
+        return err;
+    }
+    // setup and add the irq callback associated
+    gpio_init_callback(&data->irq_gpio_cb, pmw3360_gpio_callback_alternative, BIT(config->irq_gpio.pin));
+
+    err = gpio_add_callback(config->irq_gpio.port, &data->irq_gpio_cb);
+    if (err) {
+        LOG_ERR("Cannot add IRQ GPIO callback");
+    }
+
+    LOG_INF("Configure irq done");
+
+    return err;
+}
+
 // polling work
 static void trackball_poll_handler(struct k_work *work) {
     LOG_INF("In polling handler callback");
-    struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
+    struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, poll_work);
     const struct device *dev = data->dev;
 
     pmw3360_report_data(dev);
@@ -775,6 +828,11 @@ void trackball_timer_stop(struct k_timer *timer) {
     // reset polling count
     polling_count = 0;
 
+//    // Clear the interrupt condition by reading motion register
+//    uint8_t motion_reg;
+//    reg_read(dev, PMW3360_REG_MOTION, &motion_reg);
+//    LOG_INF("Cleared interrupt, motion reg: 0x%02x", motion_reg);
+
     // resume motion interrupt line
     set_interrupt(dev, true);
 }
@@ -791,6 +849,7 @@ static int pmw3360_init_alternative_mode(const struct device *dev) {
 
     // setup the timer and handler function of the polling work
     k_timer_init(&data->poll_timer, trackball_timer_expiry, trackball_timer_stop);
+    k_work_init(&data->trigger_work, pmw3360_work_callback_alternative);
     k_work_init(&data->poll_work, trackball_poll_handler);
 
     // check readiness of cs gpio pin and init it to inactive
@@ -806,7 +865,7 @@ static int pmw3360_init_alternative_mode(const struct device *dev) {
     }
 
     // init irq routine
-    err = pmw3360_init_irq(dev);
+    err = pmw3360_init_irq_alternative(dev);
     if (err) {
         return err;
     }
@@ -875,8 +934,8 @@ static int pmw3360_init(const struct device *dev) {
 
     int err;
 
-    err = pmw3360_init_basic_mode(dev);
-    //err = pmw3360_init_alternative_mode(dev);
+    //err = pmw3360_init_basic_mode(dev);
+    err = pmw3360_init_alternative_mode(dev);
 
     return err;
 }
