@@ -15,6 +15,3 @@ properties:
   snipe-layers:
     type: array
     default: []
-  automouse-layer:
-    type: int
-    default: -1

@@ -512,18 +512,18 @@ static void set_interrupt(const struct device *dev, const bool en) {
 }
 
 static enum pixart_input_mode get_input_mode_for_current_layer(const struct device *dev) {
-//    const struct pixart_config *config = dev->config;
-//    uint8_t curr_layer = zmk_keymap_highest_layer_active();
-//    for (size_t i = 0; i < config->scroll_layers_len; i++) {
-//        if (curr_layer == config->scroll_layers[i]) {
-//            return SCROLL;
-//        }
-//    }
-//    for (size_t i = 0; i < config->snipe_layers_len; i++) {
-//        if (curr_layer == config->snipe_layers[i]) {
-//            return SNIPE;
-//        }
-//    }
+    const struct pixart_config *config = dev->config;
+    uint8_t curr_layer = zmk_keymap_highest_layer_active();
+    for (size_t i = 0; i < config->scroll_layers_len; i++) {
+        if (curr_layer == config->scroll_layers[i]) {
+            return SCROLL;
+        }
+    }
+    for (size_t i = 0; i < config->snipe_layers_len; i++) {
+        if (curr_layer == config->snipe_layers[i]) {
+            return SNIPE;
+        }
+    }
     return MOVE;
 }
 
@@ -569,18 +569,17 @@ static int pmw3360_report_data(const struct device *dev) {
     bool input_mode_changed = data->curr_mode != input_mode;
     switch (input_mode) {
     case MOVE:
+        LOG_INF("MOVE mode");
         set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
         dividor = CONFIG_PMW3360_CPI_DIVIDOR;
         break;
     case SCROLL:
-        set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
-        if (input_mode_changed) {
-            data->scroll_delta_x = 0;
-            data->scroll_delta_y = 0;
-        }
-        dividor = 1; // this should be handled with the ticks rather than dividors
+        LOG_INF("SCROLL mode");
+        set_cpi_if_needed(dev, CONFIG_PMW3360_SCROLL_CPI);
+        dividor = CONFIG_PMW3360_SCROLL_CPI_DIVIDOR;
         break;
     case SNIPE:
+        LOG_INF("SNIPE mode");
         set_cpi_if_needed(dev, CONFIG_PMW3360_SNIPE_CPI);
         dividor = CONFIG_PMW3360_SNIPE_CPI_DIVIDOR;
         break;
@@ -612,10 +611,8 @@ static int pmw3360_report_data(const struct device *dev) {
     }
 
     if (x != 0 || y != 0) {
-        if (input_mode != SCROLL) {
-            input_report_rel(dev, INPUT_REL_X, x, false, K_FOREVER);
-            input_report_rel(dev, INPUT_REL_Y, y, true, K_FOREVER);
-        }
+        input_report_rel(dev, INPUT_REL_X, x, false, K_FOREVER);
+        input_report_rel(dev, INPUT_REL_Y, y, true, K_FOREVER);
     }
 
     return err;

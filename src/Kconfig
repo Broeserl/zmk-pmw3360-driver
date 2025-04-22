@@ -72,6 +72,20 @@ config PMW3360_CPI_DIVIDOR
     help
       Default CPI dividor value.
 
+config PMW3360_SCROLL_CPI
+    int "PMW3360's CPI in scroll mode"
+    default 800
+    range 100 12000
+    help
+      Scroll CPI value
+
+config PMW3360_SCROLL_CPI_DIVIDOR
+    int "PMW3360's CPI dividor in scroll mode"
+    default 1
+    range 1 12
+    help
+      Scroll CPI dividor value.
+
 config PMW3360_SNIPE_CPI
     int "PMW3360's CPI in snipe mode"
     default 200
