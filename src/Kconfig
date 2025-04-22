@@ -6,10 +6,10 @@
 #
 
 menuconfig PMW3360
-	bool "PMW3360 mouse optical sensor"
+    bool "PMW3360 mouse optical sensor"
   select SPI
-	help
-	  Enable PMW3360 mouse optical sensor.
+    help
+      Enable PMW3360 mouse optical sensor.
 
 if PMW3360
 
@@ -31,7 +31,6 @@ config PMW3360_INTERRUPT_POLLING
       In this mode, sensor interrupts trigger a timer that polls the sensor
       multiple times. This can improve tracking reliability with multiple
       samples after motion is detected.
-
 endchoice
 
 config PMW3360_POLLING_INTERVAL_MS
@@ -50,19 +49,28 @@ config PMW3360_MAX_POLL_COUNT
     help
       Maximum number of polling events triggered by a single motion interrupt.
 
+config PMW3360_INTERRUPT_DIRECT_DELAY_MS
+    int "Delay in milliseconds for direct interrupt handling"
+    default 15
+    range 0 100
+    depends on PMW3360_INTERRUPT_DIRECT
+    help
+      Delay before processing the interrupt in direct interrupt handling mode.
+      Helps to avoid overwhelming the ble system with mouse movement events.
+
 config PMW3360_CPI
-	int "PMW3360's default CPI"
-	default 1600
-	range 100 12000
-	help
-	  Default CPI value.
+    int "PMW3360's default CPI"
+    default 1600
+    range 100 12000
+    help
+      Default CPI value.
 
 config PMW3360_CPI_DIVIDOR
-	int "PMW3360's default CPI dividor"
-	default 4
-	range 1 12
-	help
-	  Default CPI dividor value.
+    int "PMW3360's default CPI dividor"
+    default 4
+    range 1 12
+    help
+      Default CPI dividor value.
 
 config PMW3360_SNIPE_CPI
     int "PMW3360's CPI in snipe mode"
@@ -78,31 +86,29 @@ config PMW3360_SNIPE_CPI_DIVIDOR
     help
       Snipe CPI dividor value.
 
-
 config PMW3360_RUN_DOWNSHIFT_TIME_MS
-	int "PMW3360's default RUN mode downshift time"
-	default 500
-	range 10 2550
-	help
-	  Default RUN mode downshift down time in milliseconds.
-	  Time after which sensor goes from RUN to REST1 mode.
+    int "PMW3360's default RUN mode downshift time"
+    default 500
+    range 10 2550
+    help
+      Default RUN mode downshift down time in milliseconds.
+      Time after which sensor goes from RUN to REST1 mode.
 
 config PMW3360_REST1_DOWNSHIFT_TIME_MS
-	int "PMW3360's default REST1 mode downshift time"
-	default 9220
-	range 320 81600
-	help
-	  Default REST1 mode downshift down time in milliseconds.
-	  Time after which sensor goes from REST1 to REST2 mode.
+    int "PMW3360's default REST1 mode downshift time"
+    default 9220
+    range 320 81600
+    help
+      Default REST1 mode downshift down time in milliseconds.
+      Time after which sensor goes from REST1 to REST2 mode.
 
 config PMW3360_REST2_DOWNSHIFT_TIME_MS
-	int "PMW3360's default REST2 mode downshift time"
-	default 150000
-	range 3200 816000
-	help
-	  Default REST2 mode downshift down time in milliseconds.
-	  Time after which sensor goes from REST2 to REST3 mode.
-
+    int "PMW3360's default REST2 mode downshift time"
+    default 150000
+    range 3200 816000
+    help
+      Default REST2 mode downshift down time in milliseconds.
+      Time after which sensor goes from REST2 to REST3 mode.
 
 config PMW3360_INVERT_X
     bool "Invert the X axis of PMW3360 sensor"
@@ -111,11 +117,11 @@ config PMW3360_INVERT_Y
     bool "Invert the Y axis of PMW3360 sensor"
 
 config PMW3360_ROTATION_ANGLE_DEG
-  int "PMW3360's default rotation angle in degree"
-  default 0
-  range 0 355
-  help
-    Default rotation angle of the sensor input in degree.
+    int "PMW3360's default rotation angle in degree"
+    default 0
+    range 0 355
+    help
+      Default rotation angle of the sensor input in degree.
 
 
 module = PMW3360

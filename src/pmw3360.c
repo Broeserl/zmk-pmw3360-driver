@@ -708,42 +708,15 @@ static int pmw3360_init_irq(const struct device *dev, gpio_callback_handler_t ca
     return err;
 }
 
-#if defined(CONFIG_PMW3360_INTERRUPT_DIRECT)
-static void pmw3360_gpio_callback(const struct device *gpiob, struct gpio_callback *cb,
-                                  uint32_t pins) {
-    LOG_INF("In pwm3360_gpio_callback");
-    struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
-    const struct device *dev = data->dev;
-
-    set_interrupt(dev, false);
-
-    // ugly, ugly, ugly hack, to avoid overwhelming the BLE interface
-    k_busy_wait(15000);
-    // submit the real handler work
-    k_work_submit(&data->trigger_work);
-}
-
-static void pmw3360_work_callback(struct k_work *work) {
-    LOG_INF("In pwm3360_work_callback");
-    struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
-    const struct device *dev = data->dev;
-
-    pmw3360_report_data(dev);
-    set_interrupt(dev, true);
-}
-
-static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
-    LOG_INF("Start initializing basic mode...");
-
+static int pmw3360_init_common(const struct device *dev,
+                              gpio_callback_handler_t callback_handler,
+                              void (*work_init_func)(const struct device *dev)) {
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
     int err;
 
     // init device pointer
     data->dev = dev;
-
-    // init trigger handler work
-    k_work_init(&data->trigger_work, pmw3360_work_callback);
 
     // check readiness of cs gpio pin and init it to inactive
     if (!device_is_ready(config->cs_gpio.port)) {
@@ -757,29 +730,61 @@ static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
         return err;
     }
 
+    // Let the mode-specific function initialize work/timer structures
+    if (work_init_func != NULL) {
+        work_init_func(dev);
+    }
+
     // init irq routine
-    err = pmw3360_init_irq(dev, pmw3360_gpio_callback);
+    err = pmw3360_init_irq(dev, callback_handler);
     if (err) {
         return err;
     }
 
-    // Setup delayable and non-blocking init jobs, including following steps:
-    // 1. power reset
-    // 2. clear motion registers
-    // 3. srom firmware download and checking
-    // 4. eable rest mode
-    // 5. set cpi and downshift time (not sample rate)
-    // The sensor is ready to work (i.e., data->ready=true after the above steps are finished)
+    // Setup delayable and non-blocking init jobs
     k_work_init_delayable(&data->init_work, pmw3360_async_init);
-
     k_work_schedule(&data->init_work, K_MSEC(async_init_delay[data->async_init_step]));
 
     return err;
 }
 
+#if defined(CONFIG_PMW3360_INTERRUPT_DIRECT)
+static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct gpio_callback *cb,
+                                  uint32_t pins) {
+    LOG_INF("In pwm3360_gpio_callback");
+    struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
+    const struct device *dev = data->dev;
+
+    set_interrupt(dev, false);
+
+    // ugly, ugly, ugly hack, to avoid overwhelming the BLE interface
+    k_busy_wait(CONFIG_PMW3360_INTERRUPT_DIRECT_DELAY_MS * 1000);
+    // submit the real handler work
+    k_work_submit(&data->trigger_work);
+}
+
+static void pmw3360_work_callback(struct k_work *work) {
+    LOG_INF("In pwm3360_work_callback");
+    struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
+    const struct device *dev = data->dev;
+
+    pmw3360_report_data(dev);
+    set_interrupt(dev, true);
+}
+
+static void direct_mode_work_init(const struct device *dev) {
+    struct pixart_data *data = dev->data;
+    k_work_init(&data->trigger_work, pmw3360_work_callback);
+}
+
+static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
+    LOG_INF("Start initializing direct interrupt mode...");
+    return pmw3360_init_common(dev, pmw3360_gpio_callback_direct_mode, direct_mode_work_init);
+}
+
 #elif defined(CONFIG_PMW3360_INTERRUPT_POLLING)
 
-static void pmw3360_gpio_callback_alternative(const struct device *gpiob, struct gpio_callback *cb,
+static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
     LOG_INF("In pwm3360_gpio_callback");
     struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
@@ -829,50 +834,16 @@ void polling_timer_stop(struct k_timer *timer) {
     set_interrupt(dev, true);
 }
 
-static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
-    LOG_INF("Start initializing basic mode...");
-
+// Polling mode work initialization
+static void polling_mode_work_init(const struct device *dev) {
     struct pixart_data *data = dev->data;
-    const struct pixart_config *config = dev->config;
-    int err;
-
-    // init device pointer
-    data->dev = dev;
-
-    // setup the timer and handler function of the polling work
     k_timer_init(&data->poll_timer, polling_timer_expiry, polling_timer_stop);
     k_work_init(&data->poll_work, trackball_poll_handler);
+}
 
-    // check readiness of cs gpio pin and init it to inactive
-    if (!device_is_ready(config->cs_gpio.port)) {
-        LOG_ERR("SPI CS device not ready");
-        return -ENODEV;
-    }
-
-    err = gpio_pin_configure_dt(&config->cs_gpio, GPIO_OUTPUT_INACTIVE);
-    if (err) {
-        LOG_ERR("Cannot configure SPI CS GPIO");
-        return err;
-    }
-
-    // init irq routine
-    err = pmw3360_init_irq(dev, pmw3360_gpio_callback_alternative);
-    if (err) {
-        return err;
-    }
-
-    // Setup delayable and non-blocking init jobs, including following steps:
-    // 1. power reset
-    // 2. clear motion registers
-    // 3. srom firmware download and checking
-    // 4. eable rest mode
-    // 5. set cpi and downshift time (not sample rate)
-    // The sensor is ready to work (i.e., data->ready=true after the above steps are finished)
-    k_work_init_delayable(&data->init_work, pmw3360_async_init);
-
-    k_work_schedule(&data->init_work, K_MSEC(async_init_delay[data->async_init_step]));
-
-    return err;
+static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
+    LOG_INF("Start initializing timer-based polling mode...");
+    return pmw3360_init_common(dev, pmw3360_gpio_callback_polling_mode, polling_mode_work_init);
 }
 #endif
 
