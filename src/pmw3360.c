@@ -89,6 +89,17 @@ static int (*const async_init_fn[ASYNC_INIT_STEP_COUNT])(const struct device *de
     [ASYNC_INIT_STEP_CONFIGURE] = pmw3360_async_init_configure,
 };
 
+/**
+ * Control the SPI chip-select GPIO and enforce required NCS-SCLK timing.
+ *
+ * Toggles the configured CS GPIO to the specified state and applies the
+ * T_NCS_SCLK delay before deasserting and after asserting the line to meet
+ * the sensor's timing requirements.
+ *
+ * @param dev Device instance containing the CS GPIO configuration.
+ * @param enable true to assert (enable) CS, false to deassert (disable) CS.
+ * @returns 0 on success, or a negative errno value returned by gpio_pin_set_dt on failure.
+ */
 static int spi_cs_ctrl(const struct device *dev, bool enable) {
     const struct pixart_config *config = dev->config;
     int err;
@@ -198,6 +209,15 @@ static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
     return 0;
 }
 
+/**
+ * Read a motion burst from the PMW3360 sensor into the provided buffer.
+ *
+ * @param buf Buffer to receive burst data; must be at least @p burst_size bytes.
+ * @param burst_size Number of bytes to read from the motion burst; must be less than or equal to PMW3360_MAX_BURST_SIZE.
+ * @returns 0 on success, negative errno on failure.
+ *
+ * On success fills @p buf with the burst data and sets the device's last_read_burst flag. 
+ */
 static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burst_size) {
 
     LOG_DBG("In burst read");
@@ -260,6 +280,18 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
     return 0;
 }
 
+/**
+ * Write a sequence of bytes to a PMW3360 burst register.
+ *
+ * Performs a burst write to the specified sensor register and updates the device
+ * state to reflect that the last operation was not a burst read.
+ *
+ * @param dev Pointer to the device instance.
+ * @param reg Register address to write the burst to.
+ * @param buf Buffer containing the bytes to write.
+ * @param size Number of bytes to write from @p buf.
+ * @returns 0 on success, or a negative errno code if SPI or chip-select control fails.
+ */
 static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf, size_t size) {
     LOG_DBG("In burst write");
     int err;
@@ -308,6 +340,15 @@ static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf
     return 0;
 }
 
+/**
+ * Configure the sensor CPI (counts per inch).
+ *
+ * Accepts a CPI value in 100‑CPI steps between PMW3360_MIN_CPI and PMW3360_MAX_CPI,
+ * converts it to the device register encoding, and writes it to PMW3360_REG_CONFIG1.
+ *
+ * @param cpi Desired CPI; must be a multiple of 100 and within the supported range.
+ * @returns 0 on success, negative errno on failure (for example, `-EINVAL` if `cpi` is out of range or if the register write fails).
+ */
 static int set_cpi(const struct device *dev, uint32_t cpi) {
     /* Set resolution with CPI step of 100 cpi
      * 0x00: 100 cpi (minimum cpi)
@@ -336,7 +377,26 @@ static int set_cpi(const struct device *dev, uint32_t cpi) {
     return err;
 }
 
-/* unit: ms */
+/**
+ * Configure a downshift interval (in milliseconds) for a PMW3360 downshift register.
+ *
+ * Validates that the requested time is within the supported range for the specified
+ * downshift register, converts the time to the corresponding register value, and
+ * writes it to the sensor.
+ *
+ * @param dev Pointer to the device instance.
+ * @param reg_addr Downshift register address; one of:
+ *                 - PMW3360_REG_RUN_DOWNSHIFT
+ *                 - PMW3360_REG_REST1_DOWNSHIFT
+ *                 - PMW3360_REG_REST2_DOWNSHIFT
+ *                 The unit of `time` is milliseconds and each register has its own
+ *                 resolution/multiplier.
+ * @param time Requested downshift time in milliseconds.
+ * @returns 0 on success.
+ * @returns -ENOTSUP if `reg_addr` is not a supported downshift register.
+ * @returns -EINVAL if `time` is outside the valid range for the selected register.
+ * @returns a negative error code returned by the underlying register write on failure.
+ */
 static int set_downshift_time(const struct device *dev, uint8_t reg_addr, uint32_t time) {
     /* Set downshift time in ms:
      * - Run downshift time (from Run to Rest1 mode), default: 500ms
@@ -398,6 +458,15 @@ static int set_downshift_time(const struct device *dev, uint8_t reg_addr, uint32
     return err;
 }
 
+/**
+ * Prepare the sensor for firmware download by reading status registers, disabling REST mode,
+ * and initializing the SROM interface.
+ *
+ * Performs reads from registers 0x02–0x06, clears the REST enable bit in CONFIG2, and writes
+ * the SROM init value to the SROM_ENABLE register.
+ *
+ * @returns 0 on success, negative errno on failure. 
+ */
 static int pmw3360_async_init_fw_load_start(const struct device *dev) {
     int err = 0;
 
@@ -429,6 +498,14 @@ static int pmw3360_async_init_fw_load_start(const struct device *dev) {
     return err;
 }
 
+/**
+ * Start the sensor's SROM download and upload the PMW3360 firmware.
+ *
+ * Initiates SROM download by writing the SROM start value, then uploads the
+ * firmware blob to the SROM load burst register.
+ *
+ * @returns 0 on success, negative errno code on failure.
+ */
 static int pmw3360_async_init_fw_load_continue(const struct device *dev) {
     int err;
 
@@ -453,6 +530,16 @@ static int pmw3360_async_init_fw_load_continue(const struct device *dev) {
     return err;
 }
 
+/**
+ * Verify sensor firmware and enable REST modes.
+ *
+ * Reads the SROM_ID and PRODUCT_ID registers to confirm the sensor is running
+ * the expected firmware and product. On success writes PMW3360_CONFIG2_VALUE to
+ * PMW3360_REG_CONFIG2 to enable REST modes.
+ *
+ * @returns 0 on success, -EIO if firmware or product ID mismatch, or a negative
+ * errno value from register I/O on failure.
+ */
 static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     int err;
 
@@ -496,6 +583,15 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     return err;
 }
 
+/**
+ * Configure the device's IRQ GPIO interrupt enable state.
+ *
+ * Sets the IRQ GPIO described in the device configuration to active level interrupt
+ * when `en` is true, or disables the interrupt when `en` is false. Logs an error
+ * if configuring the GPIO interrupt fails.
+ *
+ * @param en true to enable the IRQ interrupt, false to disable it.
+ */
 static void set_interrupt(const struct device *dev, const bool en) {
     LOG_DBG("In pwm3360_set_interrupt");
     const struct pixart_config *config = dev->config;
@@ -506,6 +602,13 @@ static void set_interrupt(const struct device *dev, const bool en) {
     }
 }
 
+/**
+ * Selects the PixArt input mode based on the currently active keymap layer.
+ *
+ * @returns `SCROLL` if the active layer is listed in the device's scroll_layers,
+ *          `SNIPE` if the active layer is listed in the device's snipe_layers,
+ *          `MOVE` otherwise.
+ */
 static enum pixart_input_mode get_input_mode_for_current_layer(const struct device *dev) {
     const struct pixart_config *config = dev->config;
     uint8_t curr_layer = zmk_keymap_highest_layer_active();
@@ -522,6 +625,15 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
     return MOVE;
 }
 
+/**
+ * Update the device CPI (counts per inch) only when the requested value differs from the cached value.
+ *
+ * If the CPI is changed successfully, the cached current CPI is updated.
+ *
+ * @param dev Pointer to the device instance.
+ * @param cpi Requested CPI value to apply.
+ * @returns `0` on success, negative errno returned by the underlying CPI set operation on failure.
+ */
 static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
     LOG_DBG("In pwm3360_set_cpi_if_needed");
     struct pixart_data *data = dev->data;
@@ -535,7 +647,14 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
     return 0;
 }
 
-// Function to rotate coordinates by a specified angle
+/**
+ * Rotate 2D coordinates by a given angle using precomputed 5-degree-step lookup tables.
+ * @param x Input X coordinate.
+ * @param y Input Y coordinate.
+ * @param angle_degrees Rotation angle in degrees; normalized to the range [0, 359]. Best results when angle is a multiple of 5.
+ * @param x_out Pointer to receive the rotated X coordinate (stored as int16_t).
+ * @param y_out Pointer to receive the rotated Y coordinate (stored as int16_t).
+ */
  static void rotate_coordinates(int16_t x, int16_t y, int angle_degrees, int16_t *x_out, int16_t *y_out) {
     // Ensure the angle is within valid range [0, 360)
     // Since Kconfig enforces 0-355 in 5-degree steps, normalize just in case
@@ -562,6 +681,21 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
     *y_out = (int16_t)(x * sin_angle + y * cos_angle);
 }
 
+/**
+ * Read motion data from the sensor, transform it according to current mode and
+ * configuration, and report relative X/Y movements to the input subsystem.
+ *
+ * The function selects CPI and scaling based on the current input mode
+ * (MOVE/SCROLL/SNIPE), ensures the sensor is configured accordingly, reads a
+ * motion burst, applies per-config divisor, rotates and optionally inverts the
+ * axes, and emits relative X/Y reports when movement is non-zero.
+ *
+ * @param dev Device instance for the PMW3360 sensor.
+ * @returns `0` on success; a negative errno on failure:
+ *          `-EBUSY` if the device is not initialized yet,
+ *          `-ENOTSUP` if the input mode is unsupported,
+ *          or error codes propagated from CPI setup or motion-burst read operations.
+ */
 static int pmw3360_report_data(const struct device *dev) {
     LOG_DBG("In pwm3360_report_data");
     struct pixart_data *data = dev->data;
@@ -631,6 +765,11 @@ static int pmw3360_report_data(const struct device *dev) {
     return err;
 }
 
+/**
+ * Perform a power-up reset of the PMW3360 sensor.
+ *
+ * @returns 0 on success, negative errno code on failure.
+ */
 static int pmw3360_async_init_power_up(const struct device *dev) {
     /* Reset sensor */
     LOG_DBG("async_init_power_up");
@@ -638,6 +777,15 @@ static int pmw3360_async_init_power_up(const struct device *dev) {
     return reg_write(dev, PMW3360_REG_POWER_UP_RESET, PMW3360_POWERUP_CMD_RESET);
 }
 
+/**
+ * Configure the PMW3360 sensor after firmware load.
+ *
+ * Sets the initial CPI and programs run/rest downshift timing registers; on success
+ * caches the configured CPI in the device state.
+ *
+ * @param dev PMW3360 device instance.
+ * @returns 0 on success, negative errno code on failure. 
+ */
 static int pmw3360_async_init_configure(const struct device *dev) {
     LOG_DBG("pmw3360_async_init_configure");
     int err;
@@ -666,6 +814,17 @@ static int pmw3360_async_init_configure(const struct device *dev) {
     return err;
 }
 
+/**
+ * Perform a single step of the driver's asynchronous initialization state machine.
+ *
+ * Invoked by the Zephyr workqueue; runs the function for the current async init
+ * step, stores any error in the device's runtime state, and either advances and
+ * reschedules the next step after its configured delay or marks the device ready
+ * and enables interrupts when initialization completes.
+ *
+ * @param work Work item provided by the Zephyr workqueue; must embed the driver's
+ *             init_work member so the containing pixart_data can be retrieved.
+ */
 static void pmw3360_async_init(struct k_work *work) {
     LOG_DBG("pmw3360_async_init");
     struct k_work_delayable *work2 = (struct k_work_delayable *)work;
@@ -690,6 +849,18 @@ static void pmw3360_async_init(struct k_work *work) {
     }
 }
 
+/**
+ * Configure the device's IRQ GPIO pin and register a GPIO callback handler.
+ *
+ * Initializes the IRQ GPIO as an input, attaches the provided callback to the
+ * device's gpio callback structure, and adds that callback to the GPIO port.
+ *
+ * @param dev Pointer to the device instance containing config and runtime data.
+ * @param callback_handler GPIO callback function to invoke on IRQ events.
+ * @returns 0 on success, -ENODEV if the IRQ GPIO device is not ready, or a
+ *          negative errno value returned by GPIO configuration or callback
+ *          registration on failure.
+ */
 static int pmw3360_init_irq(const struct device *dev, gpio_callback_handler_t callback_handler) {
     LOG_DBG("Configure irq...");
 
@@ -763,6 +934,16 @@ static int pmw3360_init_common(const struct device *dev,
 }
 
 #if defined(CONFIG_PMW3360_INTERRUPT_DIRECT)
+/**
+ * GPIO interrupt callback for direct-interrupt (trigger) mode.
+ *
+ * Disables further device interrupts, applies a short blocking delay to rate-limit
+ * event handling, and enqueues the driver's trigger work to process the event.
+ *
+ * @param gpiob GPIO device that raised the interrupt.
+ * @param cb Pointer to the GPIO callback structure embedded in driver state.
+ * @param pins Bitmask of pins that triggered the callback.
+ */
 static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
     LOG_DBG("In pwm3360_gpio_callback");
@@ -777,6 +958,13 @@ static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct
     k_work_submit(&data->trigger_work);
 }
 
+/**
+ * Handle scheduled motion-report work for the PMW3360 device.
+ *
+ * Reads and reports sensor motion data, then re-enables the device interrupt.
+ *
+ * @param work Work item corresponding to the device's trigger_work.
+ */
 static void pmw3360_work_callback(struct k_work *work) {
     LOG_DBG("In pwm3360_work_callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
@@ -786,11 +974,24 @@ static void pmw3360_work_callback(struct k_work *work) {
     set_interrupt(dev, true);
 }
 
+/**
+ * Initialize the work item used to handle direct-interrupt triggers.
+ *
+ * @param dev Pointer to the PMW3360 device instance.
+ */
 static void direct_mode_work_init(const struct device *dev) {
     struct pixart_data *data = dev->data;
     k_work_init(&data->trigger_work, pmw3360_work_callback);
 }
 
+/**
+ * Initialize the device for direct (hardware) interrupt operation.
+ *
+ * Performs driver initialization required to operate in direct interrupt mode,
+ * including GPIO callback and work setup specific to that mode.
+ *
+ * @returns 0 on success, negative errno on failure.
+ */
 static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
     LOG_DBG("Start initializing direct interrupt mode...");
     return pmw3360_init_common(dev, pmw3360_gpio_callback_direct_mode, direct_mode_work_init);
@@ -798,6 +999,16 @@ static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
 
 #elif defined(CONFIG_PMW3360_INTERRUPT_POLLING)
 
+/**
+ * GPIO callback for polling interrupt mode that disables the GPIO interrupt and starts the polling timer.
+ *
+ * Disables further hardware interrupts for the device and starts the device's polling timer with the
+ * interval CONFIG_PMW3360_POLLING_INTERVAL_MS to perform deferred/polled motion processing.
+ *
+ * @param gpiob GPIO device that invoked the callback (unused).
+ * @param cb Pointer to the GPIO callback structure for this device.
+ * @param pins Bitmask of triggered pins (unused).
+ */
 static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
     LOG_DBG("In pwm3360_gpio_callback");
@@ -810,7 +1021,14 @@ static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struc
     k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(CONFIG_PMW3360_POLLING_INTERVAL_MS));
 }
 
-// polling work
+/**
+ * Polling workqueue handler that reports motion data from the PMW3360 device.
+ *
+ * Retrieves the enclosing pixart_data from the given work item and triggers
+ * a data report cycle by calling pmw3360_report_data().
+ *
+ * @param work Work item corresponding to the device's poll_work (container is pixart_data).
+ */
 static void trackball_poll_handler(struct k_work *work) {
     LOG_DBG("In polling handler callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, poll_work);
@@ -819,7 +1037,15 @@ static void trackball_poll_handler(struct k_work *work) {
     pmw3360_report_data(dev);
 }
 
-// timer expiry function
+/**
+ * Handle polling timer expiry by scheduling the polling work or stopping the timer when the max poll count is reached.
+ *
+ * When the embedded poll timer expires, this function submits the device's poll work to the workqueue and
+ * increments the per-device polling counter. If the counter has reached CONFIG_PMW3360_MAX_POLL_COUNT,
+ * the timer is stopped instead of scheduling additional work.
+ *
+ * @param timer Pointer to the expired kernel timer (embedded in struct pixart_data).
+ */
 void polling_timer_expiry(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
 
@@ -836,7 +1062,14 @@ void polling_timer_expiry(struct k_timer *timer) {
     }
 }
 
-// timer stop function
+/**
+ * Stop the polling timer, reset the device's polling state, and re-enable the motion IRQ line.
+ *
+ * Stops the poll timer associated with the device, sets the device's polling counter to zero,
+ * and resumes the motion interrupt by enabling the IRQ.
+ *
+ * @param timer Pointer to the Zephyr kernel timer instance embedded in the device's pixart_data.
+ */
 void polling_timer_stop(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
     const struct device *dev = data->dev;
@@ -848,13 +1081,25 @@ void polling_timer_stop(struct k_timer *timer) {
     set_interrupt(dev, true);
 }
 
-// Polling mode work initialization
+/**
+ * Initialize the device's polling-mode timer and work item.
+ *
+ * Configures the instance's poll timer with the expiry and stop callbacks
+ * and initializes the work item to run the trackball polling handler.
+ *
+ * @param dev Device instance whose polling timer and work are initialized.
+ */
 static void polling_mode_work_init(const struct device *dev) {
     struct pixart_data *data = dev->data;
     k_timer_init(&data->poll_timer, polling_timer_expiry, polling_timer_stop);
     k_work_init(&data->poll_work, trackball_poll_handler);
 }
 
+/**
+ * Initialize the driver to use timer-based polling for interrupts.
+ *
+ * @returns 0 on success, or a negative errno value on failure.
+ */
 static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
     LOG_DBG("Start initializing timer-based polling mode...");
     return pmw3360_init_common(dev, pmw3360_gpio_callback_polling_mode, polling_mode_work_init);
