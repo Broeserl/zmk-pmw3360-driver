@@ -122,6 +122,7 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
 
 static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
     int err;
+    int deassert_err = 0;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
 
@@ -139,7 +140,7 @@ static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
     err = spi_write_dt(&config->bus, &tx);
     if (err) {
         LOG_ERR("Reg read failed on SPI write: %d", err);
-        return err;
+        goto deassert_cs;
     }
 
     k_busy_wait(T_SRAD);
@@ -157,17 +158,20 @@ static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
     err = spi_read_dt(&config->bus, &rx);
     if (err) {
         LOG_ERR("Reg read failed on SPI read");
-        return err;
+        goto deassert_cs;
     }
 
-    err = spi_cs_ctrl(dev, false);
-    if (err) {
-        return err;
+deassert_cs:
+    deassert_err = spi_cs_ctrl(dev, false);
+    if (deassert_err && !err) {
+        err = deassert_err;
     }
 
     k_busy_wait(T_SRX);
 
-    data->last_read_burst = false;
+    if (!err) {
+        data->last_read_burst = false;
+    }
 
     return 0;
 }
