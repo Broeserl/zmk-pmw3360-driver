@@ -106,7 +106,7 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
         k_busy_wait(T_NCS_SCLK);
     }
 
-    LOG_INF("finished spi_cs_ctrl");
+    LOG_DBG("finished spi_cs_ctrl");
     return err;
 }
 
@@ -200,7 +200,7 @@ static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
 
 static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burst_size) {
 
-    LOG_INF("In burst read");
+    LOG_DBG("In burst read");
     int err;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
@@ -261,7 +261,7 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
 }
 
 static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf, size_t size) {
-    LOG_INF("In burst write");
+    LOG_DBG("In burst write");
     int err;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
@@ -326,7 +326,7 @@ static int set_cpi(const struct device *dev, uint32_t cpi) {
     /* Convert CPI to register value */
     uint8_t value = (cpi / 100) - 1;
 
-    LOG_INF("Setting CPI to %u (reg value 0x%x)", cpi, value);
+    LOG_DBG("Setting CPI to %u (reg value 0x%x)", cpi, value);
 
     int err = reg_write(dev, PMW3360_REG_CONFIG1, value);
     if (err) {
@@ -388,7 +388,7 @@ static int set_downshift_time(const struct device *dev, uint8_t reg_addr, uint32
     /* Convert time to register value */
     uint8_t value = time / mintime;
 
-    LOG_INF("Set downshift time to %u ms (reg value 0x%x)", time, value);
+    LOG_DBG("Set downshift time to %u ms (reg value 0x%x)", time, value);
 
     int err = reg_write(dev, reg_addr, value);
     if (err) {
@@ -432,7 +432,7 @@ static int pmw3360_async_init_fw_load_start(const struct device *dev) {
 static int pmw3360_async_init_fw_load_continue(const struct device *dev) {
     int err;
 
-    LOG_INF("Uploading optical sensor firmware...");
+    LOG_DBG("Uploading optical sensor firmware...");
 
     /* Write 0x18 to SROM_enable to start SROM download */
     err = reg_write(dev, PMW3360_REG_SROM_ENABLE, 0x18);
@@ -492,12 +492,12 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     if (err) {
         LOG_ERR("Cannot enable REST modes");
     }
-    LOG_INF("Finished firmware load verify");
+    LOG_DBG("Finished firmware load verify");
     return err;
 }
 
 static void set_interrupt(const struct device *dev, const bool en) {
-    LOG_INF("In pwm3360_set_interrupt");
+    LOG_DBG("In pwm3360_set_interrupt");
     const struct pixart_config *config = dev->config;
     int ret = gpio_pin_interrupt_configure_dt(&config->irq_gpio,
                                               en ? GPIO_INT_LEVEL_ACTIVE : GPIO_INT_DISABLE);
@@ -523,7 +523,7 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
 }
 
 static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
-    LOG_INF("In pwm3360_set_cpi_if_needed");
+    LOG_DBG("In pwm3360_set_cpi_if_needed");
     struct pixart_data *data = dev->data;
     if (cpi != data->curr_cpi) {
         int err =  set_cpi(dev, cpi);
@@ -563,7 +563,7 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
 }
 
 static int pmw3360_report_data(const struct device *dev) {
-    LOG_INF("In pwm3360_report_data");
+    LOG_DBG("In pwm3360_report_data");
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3360_BURST_SIZE];
 
@@ -577,17 +577,17 @@ static int pmw3360_report_data(const struct device *dev) {
     int err = 0;
     switch (input_mode) {
     case MOVE:
-        LOG_INF("MOVE mode");
+        LOG_DBG("MOVE mode");
         err = set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
         dividor = CONFIG_PMW3360_CPI_DIVIDOR;
         break;
     case SCROLL:
-        LOG_INF("SCROLL mode");
+        LOG_DBG("SCROLL mode");
         err = set_cpi_if_needed(dev, CONFIG_PMW3360_SCROLL_CPI);
         dividor = CONFIG_PMW3360_SCROLL_CPI_DIVIDOR;
         break;
     case SNIPE:
-        LOG_INF("SNIPE mode");
+        LOG_DBG("SNIPE mode");
         err = set_cpi_if_needed(dev, CONFIG_PMW3360_SNIPE_CPI);
         dividor = CONFIG_PMW3360_SNIPE_CPI_DIVIDOR;
         break;
@@ -633,13 +633,13 @@ static int pmw3360_report_data(const struct device *dev) {
 
 static int pmw3360_async_init_power_up(const struct device *dev) {
     /* Reset sensor */
-    LOG_INF("async_init_power_up");
+    LOG_DBG("async_init_power_up");
 
     return reg_write(dev, PMW3360_REG_POWER_UP_RESET, PMW3360_POWERUP_CMD_RESET);
 }
 
 static int pmw3360_async_init_configure(const struct device *dev) {
-    LOG_INF("pmw3360_async_init_configure");
+    LOG_DBG("pmw3360_async_init_configure");
     int err;
     struct pixart_data *data = dev->data;
 
@@ -667,12 +667,12 @@ static int pmw3360_async_init_configure(const struct device *dev) {
 }
 
 static void pmw3360_async_init(struct k_work *work) {
-    LOG_INF("pmw3360_async_init");
+    LOG_DBG("pmw3360_async_init");
     struct k_work_delayable *work2 = (struct k_work_delayable *)work;
     struct pixart_data *data = CONTAINER_OF(work2, struct pixart_data, init_work);
     const struct device *dev = data->dev;
 
-    LOG_INF("async init step %d", data->async_init_step);
+    LOG_DBG("async init step %d", data->async_init_step);
 
     data->err = async_init_fn[data->async_init_step](dev);
     if (data->err) {
@@ -691,7 +691,7 @@ static void pmw3360_async_init(struct k_work *work) {
 }
 
 static int pmw3360_init_irq(const struct device *dev, gpio_callback_handler_t callback_handler) {
-    LOG_INF("Configure irq...");
+    LOG_DBG("Configure irq...");
 
     int err;
     struct pixart_data *data = dev->data;
@@ -765,7 +765,7 @@ static int pmw3360_init_common(const struct device *dev,
 #if defined(CONFIG_PMW3360_INTERRUPT_DIRECT)
 static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
-    LOG_INF("In pwm3360_gpio_callback");
+    LOG_DBG("In pwm3360_gpio_callback");
     struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
     const struct device *dev = data->dev;
 
@@ -778,7 +778,7 @@ static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct
 }
 
 static void pmw3360_work_callback(struct k_work *work) {
-    LOG_INF("In pwm3360_work_callback");
+    LOG_DBG("In pwm3360_work_callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
     const struct device *dev = data->dev;
 
@@ -792,7 +792,7 @@ static void direct_mode_work_init(const struct device *dev) {
 }
 
 static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
-    LOG_INF("Start initializing direct interrupt mode...");
+    LOG_DBG("Start initializing direct interrupt mode...");
     return pmw3360_init_common(dev, pmw3360_gpio_callback_direct_mode, direct_mode_work_init);
 }
 
@@ -800,7 +800,7 @@ static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
 
 static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
-    LOG_INF("In pwm3360_gpio_callback");
+    LOG_DBG("In pwm3360_gpio_callback");
     struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
     const struct device *dev = data->dev;
 
@@ -812,7 +812,7 @@ static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struc
 
 // polling work
 static void trackball_poll_handler(struct k_work *work) {
-    LOG_INF("In polling handler callback");
+    LOG_DBG("In polling handler callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, poll_work);
     const struct device *dev = data->dev;
 
@@ -856,7 +856,7 @@ static void polling_mode_work_init(const struct device *dev) {
 }
 
 static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
-    LOG_INF("Start initializing timer-based polling mode...");
+    LOG_DBG("Start initializing timer-based polling mode...");
     return pmw3360_init_common(dev, pmw3360_gpio_callback_polling_mode, polling_mode_work_init);
 }
 #endif
