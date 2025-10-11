@@ -110,7 +110,7 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
 
     err = gpio_pin_set_dt(&config->cs_gpio, (int)enable);
     if (err) {
-        LOG_ERR("SPI CS ctrl failed");
+        LOG_ERR("SPI CS ctrl failed: %d", err);
     }
 
     if (enable) {
@@ -138,7 +138,7 @@ static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
 
     err = spi_write_dt(&config->bus, &tx);
     if (err) {
-        LOG_ERR("Reg read failed on SPI write");
+        LOG_ERR("Reg read failed on SPI write: %d", err);
         return err;
     }
 
@@ -221,6 +221,7 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
 
     LOG_DBG("In burst read");
     int err;
+    int deassert_err = 0;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
 
@@ -249,7 +250,7 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
     err = spi_write_dt(&config->bus, &tx);
     if (err) {
         LOG_ERR("Motion burst failed on SPI write");
-        return err;
+        goto deassert_cs;
     }
 
     k_busy_wait(T_SRAD_MOTBR);
@@ -263,20 +264,19 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
     err = spi_read_dt(&config->bus, &rx);
     if (err) {
         LOG_ERR("Motion burst failed on SPI read");
-        return err;
+        goto deassert_cs;
     }
 
-    /* Terminate burst */
-    err = spi_cs_ctrl(dev, false);
-    if (err) {
-        return err;
+deassert_cs:
+    deassert_err = spi_cs_ctrl(dev, false);
+    if (deassert_err && !err) {
+        err = deassert_err;
     }
-
     k_busy_wait(T_BEXIT);
-
-    data->last_read_burst = true;
-
-    return 0;
+    if (!err) {
+        data->last_read_burst = true;
+    }
+    return err;
 }
 
 /**
@@ -294,8 +294,9 @@ static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burs
 static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf, size_t size) {
     LOG_DBG("In burst write");
     int err;
+    int deassert_err = 0;
     struct pixart_data *data = dev->data;
-    struct pixart_config *config = dev->config;
+    const struct pixart_config *config = dev->config;
 
     /* Write address of burst register */
     uint8_t write_buf = reg | SPI_WRITE_BIT;
@@ -310,7 +311,7 @@ static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf
     err = spi_write_dt(&config->bus, &tx);
     if (err) {
         LOG_ERR("Burst write failed on SPI write");
-        return err;
+        goto deassert_cs;
     }
 
     /* Write data */
@@ -320,23 +321,21 @@ static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf
         err = spi_write_dt(&config->bus, &tx);
         if (err) {
             LOG_ERR("Burst write failed on SPI write (data)");
-            return err;
+            goto deassert_cs;
         }
 
         k_busy_wait(T_BRSEP);
     }
 
+deassert_cs:
     /* Terminate burst mode. */
-    err = spi_cs_ctrl(dev, false);
-    if (err) {
-        return err;
+    deassert_err = spi_cs_ctrl(dev, false);
+    if (deassert_err && !err) {
+        err = deassert_err;
     }
-
     k_busy_wait(T_BEXIT);
-
     data->last_read_burst = false;
-
-    return 0;
+    return err;
 }
 
 /**
@@ -360,6 +359,11 @@ static int set_cpi(const struct device *dev, uint32_t cpi) {
 
     if ((cpi > PMW3360_MAX_CPI) || (cpi < PMW3360_MIN_CPI)) {
         LOG_ERR("CPI value %u out of range", cpi);
+        return -EINVAL;
+    }
+
+    if ((cpi % 100) != 0) {
+        LOG_ERR("CPI value %u must be a multiple of 100", cpi);
         return -EINVAL;
     }
 
@@ -444,8 +448,14 @@ static int set_downshift_time(const struct device *dev, uint8_t reg_addr, uint32
 
     __ASSERT_NO_MSG((mintime > 0) && (maxtime / mintime <= UINT8_MAX));
 
-    /* Convert time to register value */
-    uint8_t value = time / mintime;
+    /* Convert time to register value (round to nearest) */
+    uint32_t q = (time + (mintime / 2)) / mintime;
+    if (q < 1) {
+        q = 1;
+    } else if (q > UINT8_MAX) {
+        q = UINT8_MAX;
+    }
+    uint8_t value = (uint8_t)q;
 
     LOG_DBG("Set downshift time to %u ms (reg value 0x%x)", time, value);
 
@@ -665,7 +675,7 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
     // Determine the index in the lookup table
     int index = angle_degrees / 5;
 
-    // Saftey check (should never happen with proper Kconfig)
+    // Safety check (should never happen with proper Kconfig)
     if (index >= TABLE_SIZE) {
         LOG_ERR("Invalid angle %d", angle_degrees);
         index = 0;
@@ -841,7 +851,7 @@ static void pmw3360_async_init(struct k_work *work) {
 
     data->err = async_init_fn[data->async_init_step](dev);
     if (data->err) {
-        LOG_ERR("initialization failed");
+        LOG_ERR("initialization failed at step %d: %d", data->async_init_step, data->err);
     } else {
         data->async_init_step++;
 
