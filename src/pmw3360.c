@@ -420,7 +420,7 @@ static int pmw3360_async_init_fw_load_start(const struct device *dev) {
     }
 
     /* Write 0x1D in SROM_enable register to initialize the operation */
-    err = reg_write(dev, PMW3360_REG_SROM_ENABLE, 0x1D);
+    err = reg_write(dev, PMW3360_REG_SROM_ENABLE, PMW3360_SROM_INIT_VALUE);
     if (err) {
         LOG_ERR("Cannot initialize SROM");
         return err;
@@ -435,7 +435,7 @@ static int pmw3360_async_init_fw_load_continue(const struct device *dev) {
     LOG_DBG("Uploading optical sensor firmware...");
 
     /* Write 0x18 to SROM_enable to start SROM download */
-    err = reg_write(dev, PMW3360_REG_SROM_ENABLE, 0x18);
+    err = reg_write(dev, PMW3360_REG_SROM_ENABLE, PMW3360_SROM_START_VALUE);
     if (err) {
         LOG_ERR("Cannot start SROM download");
         return err;
@@ -488,7 +488,7 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     /* Write 0x20 to Config2 register for wireless mouse design.
      * This enables entering rest modes.
      */
-    err = reg_write(dev, PMW3360_REG_CONFIG2, 0x20);
+    err = reg_write(dev, PMW3360_REG_CONFIG2, PMW3360_CONFIG2_REST_ENABLE);
     if (err) {
         LOG_ERR("Cannot enable REST modes");
     }
