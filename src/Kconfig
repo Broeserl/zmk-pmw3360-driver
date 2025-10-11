@@ -63,7 +63,7 @@ config PMW3360_CPI
     default 1600
     range 100 12000
     help
-      Default CPI value.
+      Default CPI value for the sensor, step size of 100.
 
 config PMW3360_CPI_DIVISOR
     int "PMW3360's default CPI divisor"

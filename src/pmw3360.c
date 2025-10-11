@@ -28,28 +28,28 @@ extern const uint8_t pmw3360_firmware_data[];
 #define TABLE_SIZE 72
  
  // Lookup table for sine values (5-degree steps)
- const float sin_table[TABLE_SIZE] = {
-      0.0,       0.0872,   0.1736,   0.2588,   0.3420,   0.4226,   0.5000,   0.5736,   0.6428,   0.7071,
-      0.7660,    0.8192,   0.8660,   0.9063,   0.9397,   0.9659,   0.9848,   0.9962,   1.0000,   0.9962,
-      0.9848,    0.9659,   0.9397,   0.9063,   0.8660,   0.8192,   0.7660,   0.7071,   0.6428,   0.5736,
-      0.5000,    0.4226,   0.3420,   0.2588,   0.1736,   0.0872,   0.0,     -0.0872,  -0.1736,  -0.2588,
-     -0.3420,   -0.4226,  -0.5000,  -0.5736,  -0.6428,  -0.7071,  -0.7660,  -0.8192,  -0.8660,  -0.9063,
-     -0.9397,   -0.9659,  -0.9848,  -0.9962,  -1.0000,  -0.9962,  -0.9848,  -0.9659,  -0.9397,  -0.9063,
-     -0.8660,   -0.8192,  -0.7660,  -0.7071,  -0.6428,  -0.5736,  -0.5000,  -0.4226,  -0.3420,  -0.2588,
-     -0.1736,   -0.0872
- };
- 
- // Lookup table for cosine values (5-degree steps)
- const float cos_table[TABLE_SIZE] = {
-     1.0,       0.9962,   0.9848,   0.9659,   0.9397,   0.9063,   0.8660,   0.8192,   0.7660,   0.7071,
-     0.6428,    0.5736,   0.5000,   0.4226,   0.3420,   0.2588,   0.1736,   0.0872,   0.0,     -0.0872,
-    -0.1736,   -0.2588,  -0.3420,  -0.4226,  -0.5000,  -0.5736,  -0.6428,  -0.7071,  -0.7660,  -0.8192,
-    -0.8660,   -0.9063,  -0.9397,  -0.9659,  -0.9848,  -0.9962,  -1.0,     -0.9962,  -0.9848,  -0.9659,
-    -0.9397,   -0.9063,  -0.8660,  -0.8192,  -0.7660,  -0.7071,  -0.6428,  -0.5736,  -0.5000,  -0.4226,
-    -0.3420,   -0.2588,  -0.1736,  -0.0872,   0.0,      0.0872,   0.1736,   0.2588,   0.3420,   0.4226,
-     0.5000,    0.5736,   0.6428,   0.7071,   0.7660,   0.8192,   0.8660,   0.9063,   0.9397,   0.9659,
-     0.9848,    0.9962
- };
+static const float sin_table[TABLE_SIZE] = {
+     0.0,       0.0872,   0.1736,   0.2588,   0.3420,   0.4226,   0.5000,   0.5736,   0.6428,   0.7071,
+     0.7660,    0.8192,   0.8660,   0.9063,   0.9397,   0.9659,   0.9848,   0.9962,   1.0000,   0.9962,
+     0.9848,    0.9659,   0.9397,   0.9063,   0.8660,   0.8192,   0.7660,   0.7071,   0.6428,   0.5736,
+     0.5000,    0.4226,   0.3420,   0.2588,   0.1736,   0.0872,   0.0,     -0.0872,  -0.1736,  -0.2588,
+    -0.3420,   -0.4226,  -0.5000,  -0.5736,  -0.6428,  -0.7071,  -0.7660,  -0.8192,  -0.8660,  -0.9063,
+    -0.9397,   -0.9659,  -0.9848,  -0.9962,  -1.0000,  -0.9962,  -0.9848,  -0.9659,  -0.9397,  -0.9063,
+    -0.8660,   -0.8192,  -0.7660,  -0.7071,  -0.6428,  -0.5736,  -0.5000,  -0.4226,  -0.3420,  -0.2588,
+    -0.1736,   -0.0872
+};
+
+// Lookup table for cosine values (5-degree steps)
+static const float cos_table[TABLE_SIZE] = {
+    1.0,       0.9962,   0.9848,   0.9659,   0.9397,   0.9063,   0.8660,   0.8192,   0.7660,   0.7071,
+    0.6428,    0.5736,   0.5000,   0.4226,   0.3420,   0.2588,   0.1736,   0.0872,   0.0,     -0.0872,
+   -0.1736,   -0.2588,  -0.3420,  -0.4226,  -0.5000,  -0.5736,  -0.6428,  -0.7071,  -0.7660,  -0.8192,
+   -0.8660,   -0.9063,  -0.9397,  -0.9659,  -0.9848,  -0.9962,  -1.0,     -0.9962,  -0.9848,  -0.9659,
+   -0.9397,   -0.9063,  -0.8660,  -0.8192,  -0.7660,  -0.7071,  -0.6428,  -0.5736,  -0.5000,  -0.4226,
+   -0.3420,   -0.2588,  -0.1736,  -0.0872,   0.0,      0.0872,   0.1736,   0.2588,   0.3420,   0.4226,
+    0.5000,    0.5736,   0.6428,   0.7071,   0.7660,   0.8192,   0.8660,   0.9063,   0.9397,   0.9659,
+    0.9848,    0.9962
+};
 
 /* sensor initialization steps definition */
 // init is done in non-bpmw3360_async_initlocking manner (i.e., async), a delayable work is defined for this job
@@ -117,7 +117,6 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
         k_busy_wait(T_NCS_SCLK);
     }
 
-    LOG_DBG("finished spi_cs_ctrl");
     return err;
 }
 
@@ -216,7 +215,7 @@ static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
  * @param burst_size Number of bytes to read from the motion burst; must be less than or equal to PMW3360_MAX_BURST_SIZE.
  * @returns 0 on success, negative errno on failure.
  *
- * On success fills @p buf with the burst data and sets the device's last_read_burst flag. 
+ * On success fills @p buf with the burst data and sets the device's last_read_burst flag.
  */
 static int motion_burst_read(const struct device *dev, uint8_t *buf, size_t burst_size) {
 
@@ -296,7 +295,7 @@ static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf
     LOG_DBG("In burst write");
     int err;
     struct pixart_data *data = dev->data;
-    const struct pixart_config *config = dev->config;
+    struct pixart_config *config = dev->config;
 
     /* Write address of burst register */
     uint8_t write_buf = reg | SPI_WRITE_BIT;
@@ -317,7 +316,7 @@ static int burst_write(const struct device *dev, uint8_t reg, const uint8_t *buf
     /* Write data */
     for (size_t i = 0; i < size; i++) {
         write_buf = buf[i];
-
+        tx_buf.buf = &write_buf;
         err = spi_write_dt(&config->bus, &tx);
         if (err) {
             LOG_ERR("Burst write failed on SPI write (data)");
@@ -465,7 +464,7 @@ static int set_downshift_time(const struct device *dev, uint8_t reg_addr, uint32
  * Performs reads from registers 0x02–0x06, clears the REST enable bit in CONFIG2, and writes
  * the SROM init value to the SROM_ENABLE register.
  *
- * @returns 0 on success, negative errno on failure. 
+ * @returns 0 on success, negative errno on failure.
  */
 static int pmw3360_async_init_fw_load_start(const struct device *dev) {
     int err = 0;
@@ -575,7 +574,7 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     /* Write 0x20 to Config2 register for wireless mouse design.
      * This enables entering rest modes.
      */
-    err = reg_write(dev, PMW3360_REG_CONFIG2, PMW3360_CONFIG2_VALUE);
+    err = reg_write(dev, PMW3360_REG_CONFIG2, PMW3360_CONFIG2_REST_ENABLE);
     if (err) {
         LOG_ERR("Cannot enable REST modes");
     }
@@ -593,7 +592,7 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
  * @param en true to enable the IRQ interrupt, false to disable it.
  */
 static void set_interrupt(const struct device *dev, const bool en) {
-    LOG_DBG("In pwm3360_set_interrupt");
+    LOG_DBG("In pmw3360_set_interrupt");
     const struct pixart_config *config = dev->config;
     int ret = gpio_pin_interrupt_configure_dt(&config->irq_gpio,
                                               en ? GPIO_INT_LEVEL_ACTIVE : GPIO_INT_DISABLE);
@@ -635,10 +634,10 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
  * @returns `0` on success, negative errno returned by the underlying CPI set operation on failure.
  */
 static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
-    LOG_DBG("In pwm3360_set_cpi_if_needed");
+    LOG_DBG("In pmw3360_set_cpi_if_needed");
     struct pixart_data *data = dev->data;
     if (cpi != data->curr_cpi) {
-        int err =  set_cpi(dev, cpi);
+        int err = set_cpi(dev, cpi);
         if (0 == err) {
             data->curr_cpi = cpi;
         }
@@ -697,7 +696,7 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
  *          or error codes propagated from CPI setup or motion-burst read operations.
  */
 static int pmw3360_report_data(const struct device *dev) {
-    LOG_DBG("In pwm3360_report_data");
+    LOG_DBG("In pmw3360_report_data");
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3360_BURST_SIZE];
 
@@ -734,6 +733,11 @@ static int pmw3360_report_data(const struct device *dev) {
         return err;
     }
 
+    if (unlikely(divisor < 1)) {
+        LOG_ERR("Invalid divisor %d", divisor);
+        return -EINVAL;
+    }
+
     data->curr_mode = input_mode;
 
     err = motion_burst_read(dev, buf, sizeof(buf));
@@ -741,8 +745,10 @@ static int pmw3360_report_data(const struct device *dev) {
         return err;
     }
 
-    int16_t raw_x = ((int16_t)sys_get_le16(&buf[PMW3360_DX_POS])) / divisor;
-    int16_t raw_y = ((int16_t)sys_get_le16(&buf[PMW3360_DY_POS])) / divisor;
+    __ASSERT_NO_MSG(divisor > 0);
+
+    int16_t raw_x = ((int16_t)TOINT16(buf[PMW3360_DX_POS] | (buf[PMW3360_DX_POS+1] << 8), 12)) / divisor;
+    int16_t raw_y = ((int16_t)TOINT16(buf[PMW3360_DY_POS] | (buf[PMW3360_DY_POS+1] << 8), 12)) / divisor;
     int16_t x, y;
 
     // Rotate the coordinates
@@ -784,7 +790,7 @@ static int pmw3360_async_init_power_up(const struct device *dev) {
  * caches the configured CPI in the device state.
  *
  * @param dev PMW3360 device instance.
- * @returns 0 on success, negative errno code on failure. 
+ * @returns 0 on success, negative errno code on failure.
  */
 static int pmw3360_async_init_configure(const struct device *dev) {
     LOG_DBG("pmw3360_async_init_configure");
@@ -946,7 +952,7 @@ static int pmw3360_init_common(const struct device *dev,
  */
 static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
-    LOG_DBG("In pwm3360_gpio_callback");
+    LOG_DBG("In pmw3360_gpio_callback");
     struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
     const struct device *dev = data->dev;
 
@@ -966,7 +972,7 @@ static void pmw3360_gpio_callback_direct_mode(const struct device *gpiob, struct
  * @param work Work item corresponding to the device's trigger_work.
  */
 static void pmw3360_work_callback(struct k_work *work) {
-    LOG_DBG("In pwm3360_work_callback");
+    LOG_DBG("In pmw3360_work_callback");
     struct pixart_data *data = CONTAINER_OF(work, struct pixart_data, trigger_work);
     const struct device *dev = data->dev;
 
@@ -1011,7 +1017,7 @@ static int pmw3360_init_interrupt_direct_mode(const struct device *dev) {
  */
 static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struct gpio_callback *cb,
                                   uint32_t pins) {
-    LOG_DBG("In pwm3360_gpio_callback");
+    LOG_DBG("In pmw3360_gpio_callback");
     struct pixart_data *data = CONTAINER_OF(cb, struct pixart_data, irq_gpio_cb);
     const struct device *dev = data->dev;
 
@@ -1046,7 +1052,7 @@ static void trackball_poll_handler(struct k_work *work) {
  *
  * @param timer Pointer to the expired kernel timer (embedded in struct pixart_data).
  */
-void polling_timer_expiry(struct k_timer *timer) {
+static void polling_timer_expiry(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
 
     // check whether reaching the polling count limit
@@ -1070,7 +1076,7 @@ void polling_timer_expiry(struct k_timer *timer) {
  *
  * @param timer Pointer to the Zephyr kernel timer instance embedded in the device's pixart_data.
  */
-void polling_timer_stop(struct k_timer *timer) {
+static void polling_timer_stop(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
     const struct device *dev = data->dev;
 
@@ -1091,6 +1097,10 @@ void polling_timer_stop(struct k_timer *timer) {
  */
 static void polling_mode_work_init(const struct device *dev) {
     struct pixart_data *data = dev->data;
+
+    // reset polling count
+    data->polling_count = 0;
+
     k_timer_init(&data->poll_timer, polling_timer_expiry, polling_timer_stop);
     k_work_init(&data->poll_work, trackball_poll_handler);
 }
