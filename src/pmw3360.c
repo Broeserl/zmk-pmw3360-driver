@@ -526,7 +526,11 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
     LOG_INF("In pwm3360_set_cpi_if_needed");
     struct pixart_data *data = dev->data;
     if (cpi != data->curr_cpi) {
-        return set_cpi(dev, cpi);
+        int err =  set_cpi(dev, cpi);
+        if (0 == err) {
+            data->curr_cpi = cpi;
+        }
+        return err;
     }
     return 0;
 }
@@ -622,8 +626,12 @@ static int pmw3360_async_init_power_up(const struct device *dev) {
 static int pmw3360_async_init_configure(const struct device *dev) {
     LOG_INF("pmw3360_async_init_configure");
     int err;
+    struct pixart_data *data = dev->data;
 
     err = set_cpi(dev, CONFIG_PMW3360_CPI);
+    if (err == 0) {
+        data->curr_cpi = CONFIG_PMW3360_CPI;
+    }
 
     if (!err) {
         err = set_downshift_time(dev, PMW3360_REG_RUN_DOWNSHIFT,
