@@ -488,7 +488,7 @@ static int pmw3360_async_init_fw_load_verify(const struct device *dev) {
     /* Write 0x20 to Config2 register for wireless mouse design.
      * This enables entering rest modes.
      */
-    err = reg_write(dev, PMW3360_REG_CONFIG2, PMW3360_CONFIG2_REST_ENABLE);
+    err = reg_write(dev, PMW3360_REG_CONFIG2, PMW3360_CONFIG2_VALUE);
     if (err) {
         LOG_ERR("Cannot enable REST modes");
     }
@@ -572,24 +572,24 @@ static int pmw3360_report_data(const struct device *dev) {
         return -EBUSY;
     }
 
-    int32_t dividor;
+    int32_t divisor;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
     int err = 0;
     switch (input_mode) {
     case MOVE:
         LOG_DBG("MOVE mode");
         err = set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
-        dividor = CONFIG_PMW3360_CPI_DIVIDOR;
+        divisor = CONFIG_PMW3360_CPI_DIVISOR;
         break;
     case SCROLL:
         LOG_DBG("SCROLL mode");
         err = set_cpi_if_needed(dev, CONFIG_PMW3360_SCROLL_CPI);
-        dividor = CONFIG_PMW3360_SCROLL_CPI_DIVIDOR;
+        divisor = CONFIG_PMW3360_SCROLL_CPI_DIVISOR;
         break;
     case SNIPE:
         LOG_DBG("SNIPE mode");
         err = set_cpi_if_needed(dev, CONFIG_PMW3360_SNIPE_CPI);
-        dividor = CONFIG_PMW3360_SNIPE_CPI_DIVIDOR;
+        divisor = CONFIG_PMW3360_SNIPE_CPI_DIVISOR;
         break;
     default:
         return -ENOTSUP;
@@ -607,8 +607,8 @@ static int pmw3360_report_data(const struct device *dev) {
         return err;
     }
 
-    int16_t raw_x = ((int16_t)sys_get_le16(&buf[PMW3360_DX_POS])) / dividor;
-    int16_t raw_y = ((int16_t)sys_get_le16(&buf[PMW3360_DY_POS])) / dividor;
+    int16_t raw_x = ((int16_t)sys_get_le16(&buf[PMW3360_DX_POS])) / divisor;
+    int16_t raw_y = ((int16_t)sys_get_le16(&buf[PMW3360_DY_POS])) / divisor;
     int16_t x, y;
 
     // Rotate the coordinates
