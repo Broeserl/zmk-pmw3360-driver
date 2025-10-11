@@ -565,29 +565,35 @@ static int pmw3360_report_data(const struct device *dev) {
 
     int32_t dividor;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
+    int err = 0;
     switch (input_mode) {
     case MOVE:
         LOG_INF("MOVE mode");
-        set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
+        err = set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
         dividor = CONFIG_PMW3360_CPI_DIVIDOR;
         break;
     case SCROLL:
         LOG_INF("SCROLL mode");
-        set_cpi_if_needed(dev, CONFIG_PMW3360_SCROLL_CPI);
+        err = set_cpi_if_needed(dev, CONFIG_PMW3360_SCROLL_CPI);
         dividor = CONFIG_PMW3360_SCROLL_CPI_DIVIDOR;
         break;
     case SNIPE:
         LOG_INF("SNIPE mode");
-        set_cpi_if_needed(dev, CONFIG_PMW3360_SNIPE_CPI);
+        err = set_cpi_if_needed(dev, CONFIG_PMW3360_SNIPE_CPI);
         dividor = CONFIG_PMW3360_SNIPE_CPI_DIVIDOR;
         break;
     default:
         return -ENOTSUP;
     }
 
+    if (err) {
+        LOG_ERR("Failed to set CPI: %d", err);
+        return err;
+    }
+
     data->curr_mode = input_mode;
 
-    int err = motion_burst_read(dev, buf, sizeof(buf));
+    err = motion_burst_read(dev, buf, sizeof(buf));
     if (err) {
         return err;
     }
