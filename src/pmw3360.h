@@ -106,6 +106,11 @@ extern "C" {
 
 #define SPI_WRITE_BIT BIT(7)
 
+// SROM initialization constants
+#define PMW3360_SROM_INIT_VALUE     0x1D
+#define PMW3360_SROM_START_VALUE    0x18
+#define PMW3360_CONFIG2_REST_ENABLE 0x20
+
 /* Helper macros used to convert sensor values. */
 #define PMW3360_SVALUE_TO_CPI(svalue) ((uint32_t)(svalue).val1)
 #define PMW3360_SVALUE_TO_TIME(svalue) ((uint32_t)(svalue).val1)
