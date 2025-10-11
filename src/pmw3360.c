@@ -20,6 +20,10 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 
+// Forward deleclaration for public API functions
+int pmw3360_cycle_cpi(const struct device *dev, bool increase);
+int pmw3360_set_cpi_direct(const struct device *dev, uint32_t cpi);
+
 
 /* SROM firmware meta-data, defined in pmw3360_piv.c */
 extern const size_t pmw3360_firmware_length;
@@ -1129,6 +1133,67 @@ static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
     return pmw3360_init_common(dev, pmw3360_gpio_callback_polling_mode, polling_mode_work_init);
 }
 #endif
+
+
+/**
+ * Cycle CPI to the next/previous predefined value.
+ *
+ * @param dev PMW3360 device instance.
+ * @param increase true to increase CPI, false to decrease.
+ * @returns 0 on success, negative errno on failure.
+ */
+int pmw3360_cycle_cpi(const struct device *dev, bool increase) {
+    struct pixart_data *data = dev->data;
+
+    // Define CPI presets (customize as needed)
+    static const uint32_t cpi_presets[] = {400, 800, 1200, 1600, 2000, 2400, 3200};
+    static const size_t preset_count = ARRAY_SIZE(cpi_presets);
+
+    if (!data->ready) {
+        LOG_WRN("Device not ready");
+        return -EBUSY;
+    }
+
+    // Find current CPI in preset list
+    size_t current_idx = 0;
+    for (size_t i = 0; i < preset_count; i++) {
+        if (data->curr_cpi == cpi_presets[i]) {
+            current_idx = i;
+            break;
+        }
+    }
+
+    // Calculate new index
+    if (increase) {
+        current_idx = (current_idx + 1) % preset_count;
+    } else {
+        current_idx = (current_idx == 0) ? (preset_count - 1) : (current_idx - 1);
+    }
+
+    uint32_t new_cpi = cpi_presets[current_idx];
+    LOG_INF("Changing CPI from %u to %u", data->curr_cpi, new_cpi);
+
+    return set_cpi_if_needed(dev, new_cpi);
+}
+
+/**
+ * Set CPI to a specific value.
+ *
+ * @param dev PMW3360 device instance.
+ * @param cpi Target CPI value.
+ * @returns 0 on success, negative errno on failure.
+ */
+int pmw3360_set_cpi_direct(const struct device *dev, uint32_t cpi) {
+    struct pixart_data *data = dev->data;
+
+    if (!data->ready) {
+        LOG_WRN("Device not ready");
+        return -EBUSY;
+    }
+
+    LOG_INF("Setting CPI to %u", cpi);
+    return set_cpi_if_needed(dev, cpi);
+}
 
 static int pmw3360_init(const struct device *dev) {
     LOG_INF("Start initializing...");
