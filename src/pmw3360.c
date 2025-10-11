@@ -25,12 +25,6 @@ LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 extern const size_t pmw3360_firmware_length;
 extern const uint8_t pmw3360_firmware_data[];
 
-#if defined(CONFIG_PMW3360_INTERRUPT_POLLING)
-static int polling_count = 0;
-static int max_poll_count = 20;
-static int polling_interval = 15;
-#endif
-
 #define TABLE_SIZE 72
  
  // Lookup table for sine values (5-degree steps)
@@ -790,7 +784,7 @@ static void pmw3360_gpio_callback_polling_mode(const struct device *gpiob, struc
     set_interrupt(dev, false);
 
     // start the polling timer
-    k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(polling_interval));
+    k_timer_start(&data->poll_timer, K_NO_WAIT, K_MSEC(CONFIG_PMW3360_POLLING_INTERVAL_MS));
 }
 
 // polling work
@@ -807,12 +801,12 @@ void polling_timer_expiry(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
 
     // check whether reaching the polling count limit
-    if (polling_count < max_poll_count) {
+    if (data->polling_count < CONFIG_PMW3360_MAX_POLL_COUNT) {
         // submit polling work to mouse work queue
         k_work_submit(&data->poll_work);
 
         // update status
-        polling_count++;
+        data->polling_count++;
     } else {
         // stop timer
         k_timer_stop(&data->poll_timer);
@@ -825,7 +819,7 @@ void polling_timer_stop(struct k_timer *timer) {
     const struct device *dev = data->dev;
 
     // reset polling count
-    polling_count = 0;
+    data->polling_count = 0;
 
     // resume motion interrupt line
     set_interrupt(dev, true);

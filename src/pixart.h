@@ -42,6 +42,9 @@ struct pixart_data {
        the following work and timer maybe used in application code */
     struct k_work                poll_work;
     struct k_timer               poll_timer;
+
+    // counter for polling
+    int polling_count;
 };
 
 // device config data structure
