@@ -536,21 +536,30 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
 }
 
 // Function to rotate coordinates by a specified angle
- static void rotate_coordinates(int16_t x, int16_t y, float angle_degrees, int16_t *x_out, int16_t *y_out) {
-     // Ensure the angle is within 0-360 degrees
-     //angle_degrees %= 360;
-     if (angle_degrees < 0) angle_degrees += 360;
+ static void rotate_coordinates(int16_t x, int16_t y, int angle_degrees, int16_t *x_out, int16_t *y_out) {
+    // Ensure the angle is within valid range [0, 360)
+    // Since Kconfig enforces 0-355 in 5-degree steps, normalize just in case
+    angle_degrees = angle_degrees % 360;
+    if (angle_degrees < 0) {
+        angle_degrees += 360;
+    }
 
-     // Determine the index in the lookup table
-     int index = angle_degrees / 5;
+    // Determine the index in the lookup table
+    int index = angle_degrees / 5;
 
-     // Get sine and cosine values from the lookup table
-     float cos_angle = cos_table[index];
-     float sin_angle = sin_table[index];
+    // Saftey check (should never happen with proper Kconfig)
+    if (index >= TABLE_SIZE) {
+        LOG_ERR("Invalid angle %d", angle_degrees);
+        index = 0;
+    }
 
-     // Apply the rotation matrix
-     *x_out = (int16_t)(x * cos_angle - y * sin_angle);
-     *y_out = (int16_t)(x * sin_angle + y * cos_angle);
+    // Get sine and cosine values from the lookup table
+    float cos_angle = cos_table[index];
+    float sin_angle = sin_table[index];
+
+    // Apply the rotation matrix
+    *x_out = (int16_t)(x * cos_angle - y * sin_angle);
+    *y_out = (int16_t)(x * sin_angle + y * cos_angle);
 }
 
 static int pmw3360_report_data(const struct device *dev) {
@@ -603,7 +612,7 @@ static int pmw3360_report_data(const struct device *dev) {
     int16_t x, y;
 
     // Rotate the coordinates
-    float angle = CONFIG_PMW3360_ROTATION_ANGLE_DEG;
+    int angle = CONFIG_PMW3360_ROTATION_ANGLE_DEG;
     rotate_coordinates(raw_x, raw_y, angle, &x, &y);
 
     if (IS_ENABLED(CONFIG_PMW3360_INVERT_X)) {
