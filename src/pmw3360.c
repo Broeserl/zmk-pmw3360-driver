@@ -1141,122 +1141,144 @@ static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
 #endif
 
 /**
- * Cycle CPI to the next/previous predefined value.
+ * Get the input mode for the currently active layer.
  *
- * @param dev PMW3360 device instance.
- * @param increase true to increase CPI, false to decrease.
- * @returns 0 on success, negative errno on failure.
+ * @param dev PMW3360 device instance
+ * @return Current input mode (MOVE, SCROLL, or SNIPE)
  */
-int pmw3360_cycle_cpi(const struct device *dev, bool increase) {
+static enum pixart_input_mode pmw3360_get_current_mode(const struct device *dev) {
+    return get_input_mode_for_current_layer(dev);
+}
+
+/**
+ * Adjust CPI of the currently active mode by a step amount.
+ *
+ * @param dev PMW3360 device instance
+ * @param increase true to increase CPI, false to decrease
+ * @return 0 on success, negative errno on failure
+ */
+int pmw3360_adjust_cpi_step(const struct device *dev, bool increase) {
     struct pixart_data *data = dev->data;
+    enum pixart_input_mode mode = pmw3360_get_current_mode(dev);
 
-    if (!data->ready) {
-        return -EBUSY;
-    }
-
-    // Determine current mode
-    enum pixart_input_mode mode = get_input_mode_for_current_layer(dev);
-
-    // Get pointer to the appropriate runtime CPI value
     uint32_t *target_cpi;
+    uint32_t step;
+    uint32_t min_cpi, max_cpi;
+
+    // Determine which CPI to adjust based on current mode
     switch (mode) {
-    case MOVE:
-        target_cpi = &data->move_cpi;
-        break;
-    case SCROLL:
-        target_cpi = &data->scroll_cpi;
-        break;
-    case SNIPE:
-        target_cpi = &data->snipe_cpi;
-        break;
-    default:
-        return -ENOTSUP;
+        case MOVE:
+            target_cpi = &data->move_cpi;
+            step = CONFIG_PMW3360_CPI_STEP;
+            min_cpi = PMW3360_MIN_CPI;
+            max_cpi = PMW3360_MAX_CPI;
+            LOG_INF("Adjusting MOVE CPI");
+            break;
+        case SCROLL:
+            target_cpi = &data->scroll_cpi;
+            step = CONFIG_PMW3360_SCROLL_CPI_STEP;
+            min_cpi = PMW3360_MIN_CPI;
+            max_cpi = PMW3360_MAX_CPI;
+            LOG_INF("Adjusting SCROLL CPI");
+            break;
+        case SNIPE:
+            target_cpi = &data->snipe_cpi;
+            step = CONFIG_PMW3360_SNIPE_CPI_STEP;
+            min_cpi = 200; // Snipe mode minimum from Kconfig
+            max_cpi = 3200; // Snipe mode maximum from Kconfig
+            LOG_INF("Adjusting SNIPE CPI");
+            break;
+        default:
+            LOG_ERR("Unknown input mode");
+            return -EINVAL;
     }
 
-    // Define CPI presets (adjust these to your preference)
-    static const uint32_t cpi_presets[] = {
-        400, 800, 1200, 1600, 2000, 2400, 3200, 4800, 6400, 8000, 12000
-    };
-    const size_t preset_count = ARRAY_SIZE(cpi_presets);
+    uint32_t new_cpi = *target_cpi;
 
-    // Find current preset index
-    size_t current_idx = 0;
-    for (size_t i = 0; i < preset_count; i++) {
-        if (cpi_presets[i] == *target_cpi) {
-            current_idx = i;
-            break;
+    if (increase) {
+        // Increase CPI, but don't exceed maximum
+        if (new_cpi + step <= max_cpi) {
+            new_cpi += step;
+        } else {
+            new_cpi = max_cpi;
+        }
+    } else {
+        // Decrease CPI, but don't go below minimum
+        if (new_cpi >= min_cpi + step) {
+            new_cpi -= step;
+        } else {
+            new_cpi = min_cpi;
         }
     }
 
-    // Calculate new index
-    if (increase) {
-        current_idx = (current_idx + 1) % preset_count;
-    } else {
-        current_idx = (current_idx == 0) ? (preset_count - 1) : (current_idx - 1);
+    // Round to nearest 100 (PMW3360 requirement)
+    new_cpi = ((new_cpi + 50) / 100) * 100;
+
+    // Clamp to valid range
+    if (new_cpi < min_cpi) {
+        new_cpi = min_cpi;
+    }
+    if (new_cpi > max_cpi) {
+        new_cpi = max_cpi;
     }
 
-    // Update runtime CPI
-    *target_cpi = cpi_presets[current_idx];
+    LOG_INF("CPI: %u -> %u", *target_cpi, new_cpi);
 
-    LOG_INF("CPI changed to %u for mode %d", *target_cpi, mode);
+    *target_cpi = new_cpi;
+
+    // If we're currently in this mode, apply the change immediately
+    if (data->curr_mode == mode) {
+        return set_cpi_if_needed(dev, new_cpi);
+    }
 
     return 0;
 }
 
 /**
- * Set CPI to a specific value.
+ * Reset CPI of the currently active mode to its Kconfig default.
  *
- * @param dev PMW3360 device instance.
- * @param cpi Target CPI value.
- * @returns 0 on success, negative errno on failure.
+ * @param dev PMW3360 device instance
+ * @return 0 on success, negative errno on failure
  */
-int pmw3360_set_cpi_direct(const struct device *dev, uint32_t cpi) {
+int pmw3360_reset_cpi_to_default(const struct device *dev) {
     struct pixart_data *data = dev->data;
+    enum pixart_input_mode mode = pmw3360_get_current_mode(dev);
 
-    if (!data->ready) {
-        return -EBUSY;
-    }
+    uint32_t *target_cpi;
+    uint32_t default_cpi;
 
-    if (cpi < PMW3360_MIN_CPI || cpi > PMW3360_MAX_CPI || (cpi % 100) != 0) {
-        return -EINVAL;
-    }
-
-    // Determine current mode and set the appropriate runtime CPI
-    enum pixart_input_mode mode = get_input_mode_for_current_layer(dev);
-
+    // Determine which CPI to reset based on current mode
     switch (mode) {
-    case MOVE:
-        data->move_cpi = cpi;
-        break;
-    case SCROLL:
-        data->scroll_cpi = cpi;
-        break;
-    case SNIPE:
-        data->snipe_cpi = cpi;
-        break;
-    default:
-        return -ENOTSUP;
+        case MOVE:
+            target_cpi = &data->move_cpi;
+            default_cpi = CONFIG_PMW3360_CPI;
+            LOG_INF("Resetting MOVE CPI to default: %u", default_cpi);
+            break;
+        case SCROLL:
+            target_cpi = &data->scroll_cpi;
+            default_cpi = CONFIG_PMW3360_SCROLL_CPI;
+            LOG_INF("Resetting SCROLL CPI to default: %u", default_cpi);
+            break;
+        case SNIPE:
+            target_cpi = &data->snipe_cpi;
+            default_cpi = CONFIG_PMW3360_SNIPE_CPI;
+            LOG_INF("Resetting SNIPE CPI to default: %u", default_cpi);
+            break;
+        default:
+            LOG_ERR("Unknown input mode");
+            return -EINVAL;
     }
 
-    LOG_INF("CPI set to %u for mode %d", cpi, mode);
+    *target_cpi = default_cpi;
+
+    // If we're currently in this mode, apply the change immediately
+    if (data->curr_mode == mode) {
+        return set_cpi_if_needed(dev, default_cpi);
+    }
 
     return 0;
 }
 
-uint32_t pmw3360_get_mode_cpi(const struct device *dev, enum pixart_input_mode mode) {
-    struct pixart_data *data = dev->data;
-
-    switch (mode) {
-    case MOVE:
-        return data->move_cpi;
-    case SCROLL:
-        return data->scroll_cpi;
-    case SNIPE:
-        return data->snipe_cpi;
-    default:
-        return 0;
-    }
-}
 
 static int pmw3360_init(const struct device *dev) {
     LOG_INF("Start initializing...");

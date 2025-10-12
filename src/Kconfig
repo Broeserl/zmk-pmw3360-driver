@@ -63,7 +63,7 @@ config PMW3360_CPI
     default 1600
     range 100 12000
     help
-      Default CPI value for the sensor, step size of 100.
+      Default CPI value for the sensor
 
 config PMW3360_CPI_DIVISOR
     int "PMW3360's default CPI divisor"
@@ -72,33 +72,55 @@ config PMW3360_CPI_DIVISOR
     help
       Default CPI divisor value.
 
+config PMW3360_CPI_STEP
+    int "CPI adjustment step size"
+    default 200
+    range 100 1000
+    help
+      Step size for CPI increase/decrease operations.
+      When using CPI inc/dec behaviors, the CPI will change by this amount.
+
 config PMW3360_SCROLL_CPI
     int "PMW3360's CPI in scroll mode"
-    default 800
+    default 3000
     range 100 12000
     help
-      Scroll CPI value
+      Scroll CPI value for the sensor
 
 config PMW3360_SCROLL_CPI_DIVISOR
     int "PMW3360's CPI divisor in scroll mode"
-    default 1
+    default 4
     range 1 12
     help
       Scroll CPI divisor value.
 
+config PMW3360_SCROLL_CPI_STEP
+    int "Scroll mode CPI adjustment step size"
+    default 100
+    range 100 500
+    help
+      Step size for scroll mode CPI adjustments.
+
 config PMW3360_SNIPE_CPI
     int "PMW3360's CPI in snipe mode"
-    default 200
-    range 200 3200
+    default 2000
+    range 200 3000
     help
-      Snipe CPI value, with 200 step
+      Snipe CPI value for the sensor
 
 config PMW3360_SNIPE_CPI_DIVISOR
     int "PMW3360's CPI divisor in snipe mode"
-    default 1
-    range 1 100
+    default 10
+    range 1 12
     help
       Snipe CPI divisor value.
+
+config PMW3360_SNIPE_CPI_STEP
+    int "Snipe mode CPI adjustment step size"
+    default 100
+    range 100 500
+    help
+      Step size for snipe mode CPI adjustments.
 
 config PMW3360_RUN_DOWNSHIFT_TIME_MS
     int "PMW3360's default RUN mode downshift time"

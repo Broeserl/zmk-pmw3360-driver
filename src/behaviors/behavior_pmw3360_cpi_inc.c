@@ -19,7 +19,7 @@ static int on_cpi_inc_pressed(struct zmk_behavior_binding *binding,
         return 0;
     }
 
-    return pmw3360_cycle_cpi(sensor, true);
+    return pmw3360_adjust_cpi_step(sensor, true);
 }
 
 static int on_cpi_inc_released(struct zmk_behavior_binding *binding,

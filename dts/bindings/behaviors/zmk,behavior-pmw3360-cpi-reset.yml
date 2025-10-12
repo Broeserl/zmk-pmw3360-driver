@@ -1,0 +1,11 @@
+description: Reset PMW3360 sensor CPI to default value
+
+compatible: "zmk,behavior-pmw3360-cpi-reset"
+
+include: zero_param.yaml
+
+properties:
+  "#binding-cells":
+    type: int
+    required: true
+    const: 0
