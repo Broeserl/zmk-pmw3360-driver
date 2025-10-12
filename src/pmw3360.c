@@ -20,7 +20,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 
-
 /* SROM firmware meta-data, defined in pmw3360_piv.c */
 extern const size_t pmw3360_firmware_length;
 extern const uint8_t pmw3360_firmware_data[];
@@ -722,20 +721,21 @@ static int pmw3360_report_data(const struct device *dev) {
     int32_t divisor;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
     int err = 0;
+
     switch (input_mode) {
     case MOVE:
         LOG_DBG("MOVE mode");
-        err = set_cpi_if_needed(dev, CONFIG_PMW3360_CPI);
+        err = set_cpi_if_needed(dev, data->move_cpi);
         divisor = CONFIG_PMW3360_CPI_DIVISOR;
         break;
     case SCROLL:
         LOG_DBG("SCROLL mode");
-        err = set_cpi_if_needed(dev, CONFIG_PMW3360_SCROLL_CPI);
+        err = set_cpi_if_needed(dev, data->scroll_cpi);
         divisor = CONFIG_PMW3360_SCROLL_CPI_DIVISOR;
         break;
     case SNIPE:
         LOG_DBG("SNIPE mode");
-        err = set_cpi_if_needed(dev, CONFIG_PMW3360_SNIPE_CPI);
+        err = set_cpi_if_needed(dev, data->snipe_cpi);
         divisor = CONFIG_PMW3360_SNIPE_CPI_DIVISOR;
         break;
     default:
@@ -810,6 +810,11 @@ static int pmw3360_async_init_configure(const struct device *dev) {
     LOG_DBG("pmw3360_async_init_configure");
     int err;
     struct pixart_data *data = dev->data;
+
+    // Set initial CPI
+    data->move_cpi = CONFIG_PMW3360_CPI;
+    data->scroll_cpi = CONFIG_PMW3360_SCROLL_CPI;
+    data->snipe_cpi = CONFIG_PMW3360_SNIPE_CPI;
 
     err = set_cpi(dev, CONFIG_PMW3360_CPI);
     if (err == 0) {
@@ -1129,6 +1134,146 @@ static int pmw3360_init_interrupt_polling_mode(const struct device *dev) {
     return pmw3360_init_common(dev, pmw3360_gpio_callback_polling_mode, polling_mode_work_init);
 }
 #endif
+
+/**
+ * Get the input mode for the currently active layer.
+ *
+ * @param dev PMW3360 device instance
+ * @return Current input mode (MOVE, SCROLL, or SNIPE)
+ */
+static enum pixart_input_mode pmw3360_get_current_mode(const struct device *dev) {
+    return get_input_mode_for_current_layer(dev);
+}
+
+/**
+ * Adjust CPI of the currently active mode by a step amount.
+ *
+ * @param dev PMW3360 device instance
+ * @param increase true to increase CPI, false to decrease
+ * @return 0 on success, negative errno on failure
+ */
+int pmw3360_adjust_cpi_step(const struct device *dev, bool increase) {
+    struct pixart_data *data = dev->data;
+    enum pixart_input_mode mode = pmw3360_get_current_mode(dev);
+
+    uint32_t *target_cpi;
+    uint32_t step;
+    uint32_t min_cpi, max_cpi;
+
+    // Determine which CPI to adjust based on current mode
+    switch (mode) {
+        case MOVE:
+            target_cpi = &data->move_cpi;
+            step = CONFIG_PMW3360_CPI_STEP;
+            min_cpi = PMW3360_MIN_CPI;
+            max_cpi = PMW3360_MAX_CPI;
+            LOG_INF("Adjusting MOVE CPI");
+            break;
+        case SCROLL:
+            target_cpi = &data->scroll_cpi;
+            step = CONFIG_PMW3360_SCROLL_CPI_STEP;
+            min_cpi = PMW3360_MIN_CPI;
+            max_cpi = PMW3360_MAX_CPI;
+            LOG_INF("Adjusting SCROLL CPI");
+            break;
+        case SNIPE:
+            target_cpi = &data->snipe_cpi;
+            step = CONFIG_PMW3360_SNIPE_CPI_STEP;
+            min_cpi = 200; // Snipe mode minimum from Kconfig
+            max_cpi = 3000; // Snipe mode maximum from Kconfig
+            LOG_INF("Adjusting SNIPE CPI");
+            break;
+        default:
+            LOG_ERR("Unknown input mode");
+            return -EINVAL;
+    }
+
+    uint32_t new_cpi = *target_cpi;
+
+    if (increase) {
+        // Increase CPI, but don't exceed maximum
+        if (new_cpi + step <= max_cpi) {
+            new_cpi += step;
+        } else {
+            new_cpi = max_cpi;
+        }
+    } else {
+        // Decrease CPI, but don't go below minimum
+        if (new_cpi >= min_cpi + step) {
+            new_cpi -= step;
+        } else {
+            new_cpi = min_cpi;
+        }
+    }
+
+    // Round to nearest 100 (PMW3360 requirement)
+    new_cpi = ((new_cpi + 50) / 100) * 100;
+
+    // Clamp to valid range
+    if (new_cpi < min_cpi) {
+        new_cpi = min_cpi;
+    }
+    if (new_cpi > max_cpi) {
+        new_cpi = max_cpi;
+    }
+
+    LOG_INF("CPI: %u -> %u", *target_cpi, new_cpi);
+
+    *target_cpi = new_cpi;
+
+    // If we're currently in this mode, apply the change immediately
+    if (data->curr_mode == mode) {
+        return set_cpi_if_needed(dev, new_cpi);
+    }
+
+    return 0;
+}
+
+/**
+ * Reset CPI of the currently active mode to its Kconfig default.
+ *
+ * @param dev PMW3360 device instance
+ * @return 0 on success, negative errno on failure
+ */
+int pmw3360_reset_cpi_to_default(const struct device *dev) {
+    struct pixart_data *data = dev->data;
+    enum pixart_input_mode mode = pmw3360_get_current_mode(dev);
+
+    uint32_t *target_cpi;
+    uint32_t default_cpi;
+
+    // Determine which CPI to reset based on current mode
+    switch (mode) {
+        case MOVE:
+            target_cpi = &data->move_cpi;
+            default_cpi = CONFIG_PMW3360_CPI;
+            LOG_INF("Resetting MOVE CPI to default: %u", default_cpi);
+            break;
+        case SCROLL:
+            target_cpi = &data->scroll_cpi;
+            default_cpi = CONFIG_PMW3360_SCROLL_CPI;
+            LOG_INF("Resetting SCROLL CPI to default: %u", default_cpi);
+            break;
+        case SNIPE:
+            target_cpi = &data->snipe_cpi;
+            default_cpi = CONFIG_PMW3360_SNIPE_CPI;
+            LOG_INF("Resetting SNIPE CPI to default: %u", default_cpi);
+            break;
+        default:
+            LOG_ERR("Unknown input mode");
+            return -EINVAL;
+    }
+
+    *target_cpi = default_cpi;
+
+    // If we're currently in this mode, apply the change immediately
+    if (data->curr_mode == mode) {
+        return set_cpi_if_needed(dev, default_cpi);
+    }
+
+    return 0;
+}
+
 
 static int pmw3360_init(const struct device *dev) {
     LOG_INF("Start initializing...");
