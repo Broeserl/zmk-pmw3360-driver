@@ -24,6 +24,11 @@ struct pixart_data {
     enum pixart_input_mode curr_mode;
     uint32_t curr_cpi;
 
+    // Runtime CPI values that can be changed by behaviors
+    uint32_t move_cpi;
+    uint32_t scroll_cpi;
+    uint32_t snipe_cpi;
+
     // motion interrupt isr
     struct gpio_callback irq_gpio_cb;
     // the work structure holding the trigger job

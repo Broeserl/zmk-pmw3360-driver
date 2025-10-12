@@ -1,0 +1,11 @@
+description: Decrease PMW3360 sensor CPI
+
+compatible: "zmk,behavior-pmw3360-cpi-dec"
+
+include: zero_param.yaml
+
+properties:
+  "#binding-cells":
+    type: int
+    required: true
+    const: 0
