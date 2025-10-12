@@ -20,11 +20,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3360, CONFIG_PMW3360_LOG_LEVEL);
 
-// Forward deleclaration for public API functions
-int pmw3360_cycle_cpi(const struct device *dev, bool increase);
-int pmw3360_set_cpi_direct(const struct device *dev, uint32_t cpi);
-
-
 /* SROM firmware meta-data, defined in pmw3360_piv.c */
 extern const size_t pmw3360_firmware_length;
 extern const uint8_t pmw3360_firmware_data[];
