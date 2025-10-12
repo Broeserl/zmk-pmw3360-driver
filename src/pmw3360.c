@@ -1180,7 +1180,7 @@ int pmw3360_adjust_cpi_step(const struct device *dev, bool increase) {
             target_cpi = &data->snipe_cpi;
             step = CONFIG_PMW3360_SNIPE_CPI_STEP;
             min_cpi = 200; // Snipe mode minimum from Kconfig
-            max_cpi = 3200; // Snipe mode maximum from Kconfig
+            max_cpi = 3000; // Snipe mode maximum from Kconfig
             LOG_INF("Adjusting SNIPE CPI");
             break;
         default:

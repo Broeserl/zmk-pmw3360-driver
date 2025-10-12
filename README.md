@@ -126,18 +126,18 @@ Add to your Kconfig configuration file:
 ```conf
 # Base CPI values for each mode
 CONFIG_PMW3360_CPI=1600
-CONFIG_PMW3360_SCROLL_CPI=800
-CONFIG_PMW3360_SNIPE_CPI=400
+CONFIG_PMW3360_SCROLL_CPI=3000
+CONFIG_PMW3360_SNIPE_CPI=2000
 
 # Step sizes for CPI adjustment behaviors
 CONFIG_PMW3360_CPI_STEP=200
-CONFIG_PMW3360_SCROLL_CPI_STEP=100
+CONFIG_PMW3360_SCROLL_CPI_STEP=200
 CONFIG_PMW3360_SNIPE_CPI_STEP=100
 
 # CPI divisors (for fine-tuning effective CPI)
 CONFIG_PMW3360_CPI_DIVISOR=1
-CONFIG_PMW3360_SCROLL_CPI_DIVISOR=1
-CONFIG_PMW3360_SNIPE_CPI_DIVISOR=1
+CONFIG_PMW3360_SCROLL_CPI_DIVISOR=4
+CONFIG_PMW3360_SNIPE_CPI_DIVISOR=10
 ```
 
 ### Keymap Example
@@ -169,9 +169,9 @@ Add behaviors to your keymap:
 2. **Persistent Changes**: CPI adjustments persist until reset or power cycle. They're stored in RAM and reset to Kconfig defaults on device restart.
 
 3. **Valid Ranges**:
-  - MOVE/SCROLL modes: 100–12000 CPI
-  - SNIPE mode: 200–3200 CPI
-  - All values are automatically rounded to the nearest 100 CPI (hardware requirement)
+- MOVE/SCROLL modes: 100–12000 CPI
+- SNIPE mode: 200–3200 CPI
+- All values are automatically rounded to the nearest 100 CPI (hardware requirement)
 
 4. **Finding Your Perfect CPI**: Start with the Kconfig defaults, then use the behaviors to fine-tune sensitivity while using your keyboard. Once you find values you like, update your Kconfig to make them permanent.
 
@@ -204,8 +204,8 @@ CONFIG_PMW3360_SCROLL_CPI_DIVISOR=1        # CPI divisor
 CONFIG_PMW3360_SCROLL_CPI_STEP=100         # Inc/dec step size
 
 # SNIPE mode (precision aiming)
-CONFIG_PMW3360_SNIPE_CPI=400               # Base CPI value
-CONFIG_PMW3360_SNIPE_CPI_DIVISOR=1         # CPI divisor
+CONFIG_PMW3360_SNIPE_CPI=2000              # Base CPI value
+CONFIG_PMW3360_SNIPE_CPI_DIVISOR=10        # CPI divisor
 CONFIG_PMW3360_SNIPE_CPI_STEP=100          # Inc/dec step size
 ```
 
@@ -256,4 +256,3 @@ This driver builds upon work from:
 - [inorichi's PMW3610 driver](https://github.com/inorichi/zmk-pmw3610-driver)
 - [ufan's implementation](https://github.com/inorichi/zmk/tree/support-trackpad)
 - [drorchen/zmk](https://github.com/drorchen/zmk/blob/trackball-support/app/boards/arm/nice_nano/trackball/trackball_new.c)
-```

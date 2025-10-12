@@ -96,7 +96,7 @@ config PMW3360_SCROLL_CPI_DIVISOR
 
 config PMW3360_SCROLL_CPI_STEP
     int "Scroll mode CPI adjustment step size"
-    default 100
+    default 200
     range 100 500
     help
       Step size for scroll mode CPI adjustments.
