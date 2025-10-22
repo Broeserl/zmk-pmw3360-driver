@@ -172,7 +172,7 @@ deassert_cs:
         data->last_read_burst = false;
     }
 
-    return 0;
+    return err;
 }
 
 static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
@@ -761,6 +761,12 @@ static int pmw3360_report_data(const struct device *dev) {
 
     __ASSERT_NO_MSG(divisor > 0);
 
+    // Add bounds checking
+    if (PMW3360_DX_POS + 1 >= sizeof(buf) || PMW3360_DY_POS + 1 >= sizeof(buf)) {
+        LOG_ERR("Motion data position out of bounds");
+        return -EINVAL;
+    }
+
     int16_t raw_x = ((int16_t)TOINT16(buf[PMW3360_DX_POS] | (buf[PMW3360_DX_POS+1] << 8), 12)) / divisor;
     int16_t raw_y = ((int16_t)TOINT16(buf[PMW3360_DY_POS] | (buf[PMW3360_DY_POS+1] << 8), 12)) / divisor;
     int16_t x, y;
@@ -1099,11 +1105,16 @@ static void polling_timer_stop(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
     const struct device *dev = data->dev;
 
+    // Disable interrupts to prevent race condition
+    unsigned int key = irq_lock();
+
     // reset polling count
     data->polling_count = 0;
 
     // resume motion interrupt line
     set_interrupt(dev, true);
+
+    irq_unlock(key);
 }
 
 /**
