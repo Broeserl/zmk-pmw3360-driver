@@ -60,7 +60,7 @@ enum async_init_step {
                                       // register
     ASYNC_INIT_STEP_FW_LOAD_CONTINUE, // start SROM download
     ASYNC_INIT_STEP_FW_LOAD_VERIFY,   // verify SROM pid and fid, enable REST mode
-    ASYNC_INIT_STEP_CONFIGURE,        // set cpi and donwshift time (run, rest1, rest2)
+    ASYNC_INIT_STEP_CONFIGURE,        // set cpi and downshift time (run, rest1, rest2)
 
     ASYNC_INIT_STEP_COUNT // end flag
 };
@@ -119,6 +119,17 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
     return err;
 }
 
+/**
+ * Read a single byte from a PMW3360 register over SPI.
+ *
+ * @param dev PMW3360 device instance.
+ * @param reg Register address to read; must have the SPI write bit cleared.
+ * @param buf Output pointer where the read byte will be stored.
+ * @returns 0 on success, negative errno on failure.
+ *
+ * Side effects:
+ * - Updates the device runtime state to indicate the last access was not a burst read.
+ */
 static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
     int err;
     int deassert_err = 0;
@@ -156,7 +167,7 @@ static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
 
     err = spi_read_dt(&config->bus, &rx);
     if (err) {
-        LOG_ERR("Reg read failed on SPI read");
+        LOG_ERR("Reg read failed on SPI read: %d", err);
         goto deassert_cs;
     }
 
@@ -172,11 +183,19 @@ deassert_cs:
         data->last_read_burst = false;
     }
 
-    return 0;
+    return err;
 }
 
+/**
+ * Write a single byte to a PMW3360 register over SPI and update driver state.
+ *
+ * @param reg Register address to write (7-bit register; write bit is applied internally).
+ * @param val Value to write to the register.
+ * @returns `0` on success, negative errno on failure.
+ */
 static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
     int err;
+    int deassert_err = 0;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
 
@@ -194,21 +213,24 @@ static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
     err = spi_write_dt(&config->bus, &tx);
     if (err) {
         LOG_ERR("Reg write failed on SPI write");
-        return err;
+        goto deassert_cs;
     }
 
     k_busy_wait(T_SCLK_NCS_WR);
 
-    err = spi_cs_ctrl(dev, false);
-    if (err) {
-        return err;
+deassert_cs:
+    deassert_err = spi_cs_ctrl(dev, false);
+    if (deassert_err && !err) {
+        err = deassert_err;
     }
 
     k_busy_wait(T_SWX);
 
-    data->last_read_burst = false;
+    if (!err) {
+        data->last_read_burst = false;
+    }
 
-    return 0;
+    return err;
 }
 
 /**
@@ -694,19 +716,14 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
 }
 
 /**
- * Read motion data from the sensor, transform it according to current mode and
- * configuration, and report relative X/Y movements to the input subsystem.
+ * Read and report relative motion from the PMW3360 sensor, applying mode-specific
+ * CPI, per-mode scaling, rotation, and optional axis inversion before reporting.
  *
- * The function selects CPI and scaling based on the current input mode
- * (MOVE/SCROLL/SNIPE), ensures the sensor is configured accordingly, reads a
- * motion burst, applies per-config divisor, rotates and optionally inverts the
- * axes, and emits relative X/Y reports when movement is non-zero.
- *
- * @param dev Device instance for the PMW3360 sensor.
  * @returns `0` on success; a negative errno on failure:
- *          `-EBUSY` if the device is not initialized yet,
- *          `-ENOTSUP` if the input mode is unsupported,
- *          or error codes propagated from CPI setup or motion-burst read operations.
+ *          `-EBUSY` if the device is not initialized,
+ *          `-ENOTSUP` if the current input mode is unsupported,
+ *          `-EINVAL` for invalid divisor or out-of-bounds motion data,
+ *          or other error codes propagated from CPI setup or motion-burst read operations.
  */
 static int pmw3360_report_data(const struct device *dev) {
     LOG_DBG("In pmw3360_report_data");
@@ -760,6 +777,12 @@ static int pmw3360_report_data(const struct device *dev) {
     }
 
     __ASSERT_NO_MSG(divisor > 0);
+
+    // Add bounds checking
+    if (PMW3360_DX_POS + 1 >= sizeof(buf) || PMW3360_DY_POS + 1 >= sizeof(buf)) {
+        LOG_ERR("Motion data position out of bounds");
+        return -EINVAL;
+    }
 
     int16_t raw_x = ((int16_t)TOINT16(buf[PMW3360_DX_POS] | (buf[PMW3360_DX_POS+1] << 8), 12)) / divisor;
     int16_t raw_y = ((int16_t)TOINT16(buf[PMW3360_DY_POS] | (buf[PMW3360_DY_POS+1] << 8), 12)) / divisor;
@@ -1099,11 +1122,16 @@ static void polling_timer_stop(struct k_timer *timer) {
     struct pixart_data *data = CONTAINER_OF(timer, struct pixart_data, poll_timer);
     const struct device *dev = data->dev;
 
+    // Disable interrupts to prevent race condition
+    unsigned int key = irq_lock();
+
     // reset polling count
     data->polling_count = 0;
 
     // resume motion interrupt line
     set_interrupt(dev, true);
+
+    irq_unlock(key);
 }
 
 /**
@@ -1192,7 +1220,7 @@ int pmw3360_adjust_cpi_step(const struct device *dev, bool increase) {
 
     if (increase) {
         // Increase CPI, but don't exceed maximum
-        if (new_cpi + step <= max_cpi) {
+        if (max_cpi - new_cpi >= step) {
             new_cpi += step;
         } else {
             new_cpi = max_cpi;
