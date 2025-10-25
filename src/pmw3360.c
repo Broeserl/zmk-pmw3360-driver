@@ -119,6 +119,17 @@ static int spi_cs_ctrl(const struct device *dev, bool enable) {
     return err;
 }
 
+/**
+ * Read a single byte from a PMW3360 register over SPI.
+ *
+ * @param dev PMW3360 device instance.
+ * @param reg Register address to read; must have the SPI write bit cleared.
+ * @param buf Output pointer where the read byte will be stored.
+ * @returns 0 on success, negative errno on failure.
+ *
+ * Side effects:
+ * - Updates the device runtime state to indicate the last access was not a burst read.
+ */
 static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
     int err;
     int deassert_err = 0;
@@ -175,6 +186,13 @@ deassert_cs:
     return err;
 }
 
+/**
+ * Write a single byte to a PMW3360 register over SPI and update driver state.
+ *
+ * @param reg Register address to write (7-bit register; write bit is applied internally).
+ * @param val Value to write to the register.
+ * @returns `0` on success, negative errno on failure.
+ */
 static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
     int err;
     struct pixart_data *data = dev->data;
@@ -694,19 +712,14 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
 }
 
 /**
- * Read motion data from the sensor, transform it according to current mode and
- * configuration, and report relative X/Y movements to the input subsystem.
+ * Read and report relative motion from the PMW3360 sensor, applying mode-specific
+ * CPI, per-mode scaling, rotation, and optional axis inversion before reporting.
  *
- * The function selects CPI and scaling based on the current input mode
- * (MOVE/SCROLL/SNIPE), ensures the sensor is configured accordingly, reads a
- * motion burst, applies per-config divisor, rotates and optionally inverts the
- * axes, and emits relative X/Y reports when movement is non-zero.
- *
- * @param dev Device instance for the PMW3360 sensor.
  * @returns `0` on success; a negative errno on failure:
- *          `-EBUSY` if the device is not initialized yet,
- *          `-ENOTSUP` if the input mode is unsupported,
- *          or error codes propagated from CPI setup or motion-burst read operations.
+ *          `-EBUSY` if the device is not initialized,
+ *          `-ENOTSUP` if the current input mode is unsupported,
+ *          `-EINVAL` for invalid divisor or out-of-bounds motion data,
+ *          or other error codes propagated from CPI setup or motion-burst read operations.
  */
 static int pmw3360_report_data(const struct device *dev) {
     LOG_DBG("In pmw3360_report_data");
