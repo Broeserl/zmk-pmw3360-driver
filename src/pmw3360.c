@@ -60,7 +60,7 @@ enum async_init_step {
                                       // register
     ASYNC_INIT_STEP_FW_LOAD_CONTINUE, // start SROM download
     ASYNC_INIT_STEP_FW_LOAD_VERIFY,   // verify SROM pid and fid, enable REST mode
-    ASYNC_INIT_STEP_CONFIGURE,        // set cpi and donwshift time (run, rest1, rest2)
+    ASYNC_INIT_STEP_CONFIGURE,        // set cpi and downshift time (run, rest1, rest2)
 
     ASYNC_INIT_STEP_COUNT // end flag
 };
@@ -167,7 +167,7 @@ static int reg_read(const struct device *dev, uint8_t reg, uint8_t *buf) {
 
     err = spi_read_dt(&config->bus, &rx);
     if (err) {
-        LOG_ERR("Reg read failed on SPI read");
+        LOG_ERR("Reg read failed on SPI read: %d", err);
         goto deassert_cs;
     }
 
@@ -195,6 +195,7 @@ deassert_cs:
  */
 static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
     int err;
+    int deassert_err = 0;
     struct pixart_data *data = dev->data;
     const struct pixart_config *config = dev->config;
 
@@ -212,21 +213,24 @@ static int reg_write(const struct device *dev, uint8_t reg, uint8_t val) {
     err = spi_write_dt(&config->bus, &tx);
     if (err) {
         LOG_ERR("Reg write failed on SPI write");
-        return err;
+        goto deassert_cs;
     }
 
     k_busy_wait(T_SCLK_NCS_WR);
 
-    err = spi_cs_ctrl(dev, false);
-    if (err) {
-        return err;
+deassert_cs:
+    deassert_err = spi_cs_ctrl(dev, false);
+    if (deassert_err && !err) {
+        err = deassert_err;
     }
 
     k_busy_wait(T_SWX);
 
-    data->last_read_burst = false;
+    if (!err) {
+        data->last_read_burst = false;
+    }
 
-    return 0;
+    return err;
 }
 
 /**
@@ -1216,7 +1220,7 @@ int pmw3360_adjust_cpi_step(const struct device *dev, bool increase) {
 
     if (increase) {
         // Increase CPI, but don't exceed maximum
-        if (new_cpi + step <= max_cpi) {
+        if (max_cpi - new_cpi >= step) {
             new_cpi += step;
         } else {
             new_cpi = max_cpi;
